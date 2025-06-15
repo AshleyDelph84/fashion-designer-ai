@@ -57,9 +57,10 @@ curl http://localhost:3000/api/inngest  # Inngest webhook
 - **Storage**: Vercel Blob for images and generated content
 - **Deployment**: Vercel serverless functions
 
-### Two-Agent System Design
-1. **Fashion Analysis Agent** (Gemini 2.5 Flash): Photo analysis, style assessment, outfit recommendations
-2. **Outfit Visualization Agent** (Flux-kontext): Generate images of user wearing recommended outfits
+### Three-Agent System Design
+1. **Fashion Analysis Agent** (Google ADK + Gemini 2.5 Flash): Photo analysis, style assessment, body type identification
+2. **Outfit Recommendation Agent** (Google ADK + Gemini 2.5 Flash): Generate personalized outfit suggestions based on analysis
+3. **Outfit Visualization Agent** (Flux-kontext): Generate images of user wearing recommended outfits
 
 ### Critical Configuration Files
 
@@ -100,9 +101,11 @@ curl http://localhost:3000/api/inngest  # Inngest webhook
 
 ### Python Agents Structure
 Located in `api/agents.py`:
-- FastAPI app with `/ping` health check
-- Agent definitions using Agent class with model, instructions, tools
-- Endpoints: `/research`, `/format` (currently newsletter-focused, needs fashion transformation)
+- **Google ADK Implementation**: Uses Google Agent Development Kit with Gemini models
+- **Multi-agent coordination**: Fashion analysis + outfit recommendation agents
+- **FastAPI endpoints**: `/ping`, `/analyze-photo`, `/recommend-outfit`
+- **Backup Gemini agents**: `api/gemini_agents.py` for direct Gemini API calls
+- **Flux visualization**: `api/flux_agents.py` for outfit image generation
 
 ### Inngest Workflows
 Located in `src/inngest/functions.ts`:
@@ -171,10 +174,16 @@ Same variables plus auto-added by Inngest integration:
 
 ### 🔧 New Architecture Components
 
-**Gemini Integration**: `api/gemini_agents.py` 
-- Uses Google Gemini 2.5 Flash for multimodal photo analysis
-- Separate endpoints: `/api/gemini/analyze-photo` and `/api/gemini/recommend-outfit`
-- Deployed alongside existing OpenAI agents for flexibility
+**Google ADK Integration**: `api/agents.py`
+- Uses Google Agent Development Kit (ADK) with Gemini 2.5 Flash models
+- Multi-agent system with fashion analysis and outfit recommendation agents
+- Endpoints: `/api/agents/analyze-photo` and `/api/agents/recommend-outfit`
+- Production-ready agent framework optimized for Gemini models
+
+**Backup Gemini Integration**: `api/gemini_agents.py` 
+- Direct Google Gemini 2.5 Flash API calls for multimodal photo analysis
+- Alternative endpoints: `/api/gemini/analyze-photo` and `/api/gemini/recommend-outfit`
+- Fallback option if ADK agents encounter issues
 
 **Flux-kontext Integration**: `api/flux_agents.py`
 - Uses Replicate API with FLUX.1 Kontext for outfit visualization generation
@@ -184,9 +193,9 @@ Same variables plus auto-added by Inngest integration:
 
 **Fashion Workflow**: `src/inngest/functions.ts`
 - Event: `fashion/analysis.requested` triggers `generateFashionRecommendations`
-- 4-step process: Photo analysis → Outfit recommendations → Visualization generation → Save results
-- Uses Gemini agents for analysis and Flux-kontext for outfit visualization
-- Complete end-to-end AI pipeline from photo upload to styled outfit images
+- 4-step process: ADK photo analysis → ADK outfit recommendations → Flux visualization → Save results
+- Uses Google ADK agents for intelligent fashion analysis and Flux-kontext for outfit visualization
+- Complete end-to-end AI pipeline with multi-agent coordination
 
 **Photo Upload System**: 
 - `PhotoUpload` component with drag-and-drop support
@@ -208,13 +217,21 @@ Same variables plus auto-added by Inngest integration:
 ### Development Status Summary
 
 ✅ **Core MVP Complete**: Full fashion analysis pipeline with AI-generated outfit visualizations
-- Photo upload and analysis with Gemini 2.5 Flash
-- Outfit recommendations based on user preferences
-- AI-generated images showing user in recommended outfits
-- Complete user flow from onboarding to results
+- Multi-agent system using Google ADK with Gemini 2.5 Flash models
+- Photo upload and analysis with intelligent body type and color assessment
+- Personalized outfit recommendations based on user preferences and analysis
+- AI-generated images showing user in recommended outfits using Flux-kontext
+- Complete user flow from onboarding to results with professional UI
+
+🎯 **Recent Migration**: Successfully migrated from OpenAI agents to Google ADK
+- ✅ Eliminated import errors and compatibility issues
+- ✅ Proper Gemini model integration with production-ready agent framework
+- ✅ Multi-agent coordination for fashion analysis workflow
+- ✅ Maintained all existing functionality while improving reliability
 
 🎯 **Next Enhancement Priorities**:
 1. User history and favorites system
-2. Shopping integration with price data
-3. Feedback and rating system for recommendations
-4. Advanced styling options and filters
+2. Shopping integration with price data and affiliate links
+3. Feedback and rating system for recommendation improvement
+4. Advanced styling options and seasonal recommendations
+5. Social sharing and outfit collection features

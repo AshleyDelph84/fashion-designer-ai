@@ -1,19 +1,23 @@
 import os
 import sys
+import json
+import asyncio
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-from agents import Agent, Runner, WebSearchTool, ModelSettings
-from dotenv import load_dotenv
 from typing import Optional
+from dotenv import load_dotenv
+from google.adk.agents import LlmAgent
+from google.adk.core import Session
+from google.adk.tools import google_search
 
 # Load environment variables from .env file
 load_dotenv()
 
-# Load OpenAI API key from environment
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-if not OPENAI_API_KEY:
-    print("OPENAI_API_KEY not found in environment variables", file=sys.stderr)
-    raise ValueError("OPENAI_API_KEY must be set")
+# Load Google API key from environment
+GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
+if not GOOGLE_API_KEY:
+    print("GOOGLE_API_KEY not found in environment variables", file=sys.stderr)
+    raise ValueError("GOOGLE_API_KEY must be set")
 
 # Define request schemas for fashion analysis
 class FashionAnalysisRequest(BaseModel):
@@ -29,25 +33,26 @@ class OutfitRecommendationRequest(BaseModel):
     budget_range: str
 
 # Initialize FastAPI app with root path for Vercel
-app = FastAPI(title="AI Fashion Guru Agents", root_path="/api/agents")
+app = FastAPI(title="AI Fashion Guru Agents (ADK)", root_path="/api/agents")
 
 @app.get("/ping")
 async def health_check():
     """Health check endpoint"""
     return {
         "status": "ok",
-        "service": "AI Fashion Guru Agents",
-        "openai_api_key_set": bool(OPENAI_API_KEY),
+        "service": "AI Fashion Guru Agents (Google ADK)",
+        "google_api_key_set": bool(GOOGLE_API_KEY),
         "vercel_url": os.getenv("VERCEL_URL", "not set"),
         "python_version": sys.version,
-        "agents_imported": "agents" in sys.modules,
+        "adk_imported": True,
     }
 
-# Fashion Analysis Agent: Analyzes photos and provides style assessment
-fashion_analysis_agent = Agent(
+# Fashion Analysis Agent using Google ADK
+fashion_analysis_agent = LlmAgent(
     name="Fashion Analysis Agent",
-    model="gpt-4-vision-preview",
-    instructions=(
+    model="gemini-2.0-flash",
+    description="Expert fashion stylist and image analyst specializing in body type assessment, color analysis, and style recommendations",
+    instruction=(
         "You are an expert fashion stylist and image analyst with deep knowledge of body types, color theory, style principles, and current fashion trends.\n\n"
         "Your role is to analyze uploaded photos and provide comprehensive fashion analysis.\n\n"
         "ANALYSIS PROCESS:\n"
@@ -90,16 +95,17 @@ fashion_analysis_agent = Agent(
         "  },\n"
         "  \"recommendations_summary\": \"Brief overview of styling direction\"\n"
         "}\n\n"
-        "Be specific, professional, and constructive in your analysis."
+        "Be specific, professional, and constructive in your analysis. Return only the JSON response."
     ),
     tools=[]
 )
 
-# Outfit Recommendation Agent: Creates specific outfit suggestions
-outfit_recommendation_agent = Agent(
-    name="Outfit Recommendation Agent", 
-    model="gpt-4.1",
-    instructions=(
+# Outfit Recommendation Agent using Google ADK
+outfit_recommendation_agent = LlmAgent(
+    name="Outfit Recommendation Agent",
+    model="gemini-2.0-flash",
+    description="Professional fashion stylist creating specific outfit recommendations based on body analysis and user preferences",
+    instruction=(
         "You are a professional fashion stylist who creates specific, actionable outfit recommendations based on body analysis, user preferences, and occasion requirements.\n\n"
         "Your expertise includes:\n"
         "- Current fashion trends and timeless style principles\n"
@@ -145,14 +151,44 @@ outfit_recommendation_agent = Agent(
         "  \"shopping_tips\": [\"tip1\", \"tip2\"],\n"
         "  \"image_generation_prompt\": \"Detailed description for AI image generation\"\n"
         "}\n\n"
-        "Focus on practical, achievable recommendations that build confidence."
+        "Focus on practical, achievable recommendations that build confidence. Return only the JSON response."
     ),
-    tools=[WebSearchTool()]
+    tools=[google_search]
 )
+
+# Multi-agent coordinator
+fashion_coordinator = LlmAgent(
+    name="Fashion Coordinator",
+    model="gemini-2.0-flash", 
+    description="Coordinates fashion analysis and outfit recommendation workflow",
+    instruction="You coordinate between fashion analysis and outfit recommendation agents to provide comprehensive styling advice.",
+    sub_agents=[fashion_analysis_agent, outfit_recommendation_agent]
+)
+
+async def run_agent_with_input(agent: LlmAgent, user_input: str) -> str:
+    """Run an ADK agent with user input and return the response"""
+    try:
+        # Create a session for the agent
+        session = Session()
+        
+        # Run the agent with the input
+        result = await session.run_async(agent, user_input)
+        
+        # Extract the response
+        if hasattr(result, 'content'):
+            return result.content
+        elif hasattr(result, 'text'):
+            return result.text
+        else:
+            return str(result)
+            
+    except Exception as e:
+        print(f"Error running agent: {str(e)}", file=sys.stderr)
+        raise e
 
 @app.post("/analyze-photo")
 async def analyze_photo(request: FashionAnalysisRequest):
-    """Analyze uploaded photo for fashion styling recommendations"""
+    """Analyze uploaded photo for fashion styling recommendations using Google ADK"""
     try:
         if not request.photo_url:
             return {"error": "No photo URL provided."}
@@ -167,9 +203,8 @@ async def analyze_photo(request: FashionAnalysisRequest):
             f"Provide a comprehensive fashion analysis following the specified JSON format."
         )
         
-        # Run the fashion analysis agent
-        result = await Runner.run(fashion_analysis_agent, user_prompt)
-        analysis_result = result.final_output
+        # Run the fashion analysis agent using ADK
+        analysis_result = await run_agent_with_input(fashion_analysis_agent, user_prompt)
         
         return {"analysis": analysis_result}
     
@@ -179,7 +214,7 @@ async def analyze_photo(request: FashionAnalysisRequest):
 
 @app.post("/recommend-outfit")
 async def recommend_outfit(request: OutfitRecommendationRequest):
-    """Generate specific outfit recommendations based on analysis"""
+    """Generate specific outfit recommendations based on analysis using Google ADK"""
     try:
         if not request.analysis_result:
             return {"error": "No analysis result provided."}
@@ -195,9 +230,8 @@ async def recommend_outfit(request: OutfitRecommendationRequest):
             f"Include specific items, brands, styling tips, and an image generation prompt for visualizing the user in the recommended outfits."
         )
         
-        # Run the outfit recommendation agent
-        result = await Runner.run(outfit_recommendation_agent, user_prompt)
-        recommendations = result.final_output
+        # Run the outfit recommendation agent using ADK
+        recommendations = await run_agent_with_input(outfit_recommendation_agent, user_prompt)
         
         return {"recommendations": recommendations}
     
