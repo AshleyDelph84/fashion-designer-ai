@@ -4,6 +4,7 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from agents import Agent, Runner, WebSearchTool, ModelSettings
 from dotenv import load_dotenv
+from typing import Optional
 
 # Load environment variables from .env file
 load_dotenv()
@@ -14,143 +15,195 @@ if not OPENAI_API_KEY:
     print("OPENAI_API_KEY not found in environment variables", file=sys.stderr)
     raise ValueError("OPENAI_API_KEY must be set")
 
-# Define request schemas
-class TopicsRequest(BaseModel):
-    topics: list[str]
+# Define request schemas for fashion analysis
+class FashionAnalysisRequest(BaseModel):
+    photo_url: str
+    user_preferences: dict
+    occasion: str
+    constraints: Optional[str] = None
 
-class FormatRequest(BaseModel):
-    raw_content: str
-    topics: list[str]
+class OutfitRecommendationRequest(BaseModel):
+    analysis_result: str
+    user_preferences: dict
+    occasion: str
+    budget_range: str
 
 # Initialize FastAPI app with root path for Vercel
-app = FastAPI(title="AI Newsletter Agents", root_path="/api/agents")
+app = FastAPI(title="AI Fashion Guru Agents", root_path="/api/agents")
 
 @app.get("/ping")
 async def health_check():
     """Health check endpoint"""
     return {
         "status": "ok",
+        "service": "AI Fashion Guru Agents",
         "openai_api_key_set": bool(OPENAI_API_KEY),
         "vercel_url": os.getenv("VERCEL_URL", "not set"),
         "python_version": sys.version,
         "agents_imported": "agents" in sys.modules,
     }
 
-# Research Agent: Searches web and generates newsletter content
-research_agent = Agent(
-    name="Research Agent",
-    model="gpt-4.1",
+# Fashion Analysis Agent: Analyzes photos and provides style assessment
+fashion_analysis_agent = Agent(
+    name="Fashion Analysis Agent",
+    model="gpt-4-vision-preview",
     instructions=(
-        "You are an AI assistant that creates insightful, well-connected newsletters on a set of given topics.\n\n"
-        "Your process:\n"
-        "1. Search the web comprehensively for the latest news and information on each one of the given topics individually:\n"
-        "   - Perform multiple searches with different query variations to ensure broad coverage\n"
-        "   - Look for recent articles (prioritize content from the last 7-30 days)\n"
-        "   - Search for both general news and specific expert analysis\n"
-        "   - If initial results are insufficient, refine your search queries and search again\n"
-        "2. Repeat the same approach to search for the other topics given\n"
-        "3. For each topic, analyze the articles to identify connections, patterns, and relationships between them.\n"
-        "4. Create a cohesive narrative that explains how these articles relate to each other.\n\n"
-        "Your output structure:\n"
-        "**[Create a compelling title that captures the essence of how all topics connect]**\n\n"
-        "*[Write one impactful sentence that summarizes the key relationship or theme connecting all the topics]*\n\n"
-        "**Executive Summary**\n"
-        "Start with a compelling 2-3 paragraph summary that:\n"
-        "- Identifies the main themes across all articles\n"
-        "- Explains the connections and relationships between different pieces of information\n"
-        "- Highlights why these connections matter\n"
-        "- Provides context for how these topics intersect\n\n"
-        "**Key Insights**\n"
-        "- List 3-5 major insights that emerge from analyzing these articles together\n"
-        "- Explain how different sources complement or contradict each other\n\n"
-        "**Detailed Analysis**\n"
-        "For each major theme or connection:\n"
-        "- Provide specific examples from the articles\n"
-        "- Include relevant facts, figures, and quotes\n"
-        "- Cite sources properly\n\n"
-        "**Conclusion**\n"
-        "Synthesize everything into a forward-looking paragraph about implications and trends.\n\n"
-        "Use clear, engaging language throughout.\n"
-        "Focus on creating a narrative that shows how these topics interconnect rather than just listing summaries."
-    ),
-    tools=[ WebSearchTool() ]
-)
-
-# Formatting Agent: Transforms content into polished markdown
-formatting_agent = Agent(
-    name="Formatting Agent", 
-    model="o3",
-    instructions=(
-        "You are an expert editor and markdown formatter who transforms research content into beautiful, readable newsletters.\n\n"
-        "Your task:\n"
-        "1. Take the provided research content and transform it into a polished newsletter\n"
-        "2. Apply professional markdown formatting:\n"
-        "   - Use **bold** for the main title\n"
-        "   - Use *italics* for the one-sentence summary\n"
-        "   - Structure content with clear hierarchical headers (##, ###)\n"
-        "   - Create visually appealing lists with bullet points or numbers\n"
-        "   - Add pull quotes using > blockquote syntax for key insights\n"
-        "   - Use horizontal rules (---) to separate major sections\n"
-        "   - Format links properly: [text](url)\n"
-        "   - Add emphasis with **bold** and *italic* text strategically\n"
-        "3. Enhance readability:\n"
-        "   - Break up long paragraphs\n"
-        "   - Add spacing between sections\n"
-        "   - Create clear visual hierarchy\n"
-        "   - Ensure smooth flow between sections\n"
-        "4. Maintain all the original content and insights\n"
-        "5. The output should be publication-ready markdown that looks professional when rendered\n\n"
-        "Transform the content into an engaging, visually appealing newsletter while preserving all information."
+        "You are an expert fashion stylist and image analyst with deep knowledge of body types, color theory, style principles, and current fashion trends.\n\n"
+        "Your role is to analyze uploaded photos and provide comprehensive fashion analysis.\n\n"
+        "ANALYSIS PROCESS:\n"
+        "1. **Body Shape Analysis**:\n"
+        "   - Assess body proportions (shoulders, waist, hips)\n"
+        "   - Identify body type (pear, apple, hourglass, rectangle, inverted triangle)\n"
+        "   - Note posture and overall silhouette\n"
+        "   - Consider height proportions\n\n"
+        "2. **Skin Tone Assessment**:\n"
+        "   - Determine undertones (warm, cool, neutral)\n"
+        "   - Assess overall complexion\n"
+        "   - Identify most flattering color palette\n"
+        "   - Note hair color and eye color if visible\n\n"
+        "3. **Current Style Evaluation**:\n"
+        "   - Analyze existing clothing choices\n"
+        "   - Identify style preferences shown\n"
+        "   - Assess fit and proportions of current outfit\n"
+        "   - Note what works well and what could be improved\n\n"
+        "4. **Professional Assessment**:\n"
+        "   - Consider the specified occasion requirements\n"
+        "   - Factor in user's stated style preferences\n"
+        "   - Account for any constraints or requirements\n"
+        "   - Assess lifestyle and practical considerations\n\n"
+        "OUTPUT FORMAT (JSON):\n"
+        "{\n"
+        "  \"body_analysis\": {\n"
+        "    \"body_type\": \"identified body type\",\n"
+        "    \"key_features\": [\"feature1\", \"feature2\"],\n"
+        "    \"proportions\": \"description of proportions\"\n"
+        "  },\n"
+        "  \"color_analysis\": {\n"
+        "    \"skin_undertone\": \"warm/cool/neutral\",\n"
+        "    \"best_colors\": [\"color1\", \"color2\", \"color3\"],\n"
+        "    \"colors_to_avoid\": [\"color1\", \"color2\"]\n"
+        "  },\n"
+        "  \"style_assessment\": {\n"
+        "    \"current_style\": \"description\",\n"
+        "    \"strengths\": [\"strength1\", \"strength2\"],\n"
+        "    \"improvement_areas\": [\"area1\", \"area2\"]\n"
+        "  },\n"
+        "  \"recommendations_summary\": \"Brief overview of styling direction\"\n"
+        "}\n\n"
+        "Be specific, professional, and constructive in your analysis."
     ),
     tools=[]
 )
 
-@app.post("/research")
-async def generate_research(request: TopicsRequest):
-    topics = request.topics
-    if not topics:
-        return {"error": "No topics provided."}
-    
-    # Get current date and yesterday for fresh news focus
-    from datetime import datetime, timedelta
-    today = datetime.now()
-    yesterday = today - timedelta(days=1)
-    today_str = today.strftime("%B %d, %Y")
-    yesterday_str = yesterday.strftime("%B %d, %Y")
-    
-    # Compose a prompt by joining the topics
-    topics_list = ", ".join(topics)
-    user_prompt = (
-        f"Today is {today_str}. I need you to research and analyze these topics comprehensively: {topics_list}. "
-        f"IMPORTANT: Focus specifically on news and events from the last 24 hours (since {yesterday_str}). "
-        f"When searching, please include date filters like 'today', 'yesterday', 'last 24 hours', or specific dates like '{today_str}' and '{yesterday_str}' in your search queries. "
-        f"Find the most recent developments, breaking news, and current events related to these topics. "
-        f"Look for connections between them and create a detailed report emphasizing what's happening RIGHT NOW."
-    )
-    
-    # Run the research agent
-    result = await Runner.run(research_agent, user_prompt)
-    raw_content = result.final_output
-    
-    return {"content": raw_content}
+# Outfit Recommendation Agent: Creates specific outfit suggestions
+outfit_recommendation_agent = Agent(
+    name="Outfit Recommendation Agent", 
+    model="gpt-4.1",
+    instructions=(
+        "You are a professional fashion stylist who creates specific, actionable outfit recommendations based on body analysis, user preferences, and occasion requirements.\n\n"
+        "Your expertise includes:\n"
+        "- Current fashion trends and timeless style principles\n"
+        "- Specific clothing items, brands, and where to find them\n"
+        "- Styling techniques for different body types\n"
+        "- Color coordination and pattern mixing\n"
+        "- Occasion-appropriate dressing\n"
+        "- Budget-conscious styling solutions\n\n"
+        "RECOMMENDATION PROCESS:\n"
+        "1. **Analyze Input Data**:\n"
+        "   - Review the fashion analysis results\n"
+        "   - Consider user's style preferences and constraints\n"
+        "   - Factor in occasion and budget requirements\n\n"
+        "2. **Create Outfit Recommendations**:\n"
+        "   - Design 3 complete outfit options\n"
+        "   - Ensure each outfit flatters the identified body type\n"
+        "   - Use colors that complement the skin tone\n"
+        "   - Include specific items (tops, bottoms, shoes, accessories)\n"
+        "   - Provide styling tips for each outfit\n\n"
+        "3. **Include Practical Details**:\n"
+        "   - Suggest specific brands and price ranges\n"
+        "   - Explain why each choice works for the user\n"
+        "   - Offer alternatives for different budgets\n"
+        "   - Include styling and fit tips\n\n"
+        "OUTPUT FORMAT (JSON):\n"
+        "{\n"
+        "  \"outfit_recommendations\": [\n"
+        "    {\n"
+        "      \"name\": \"Outfit name/theme\",\n"
+        "      \"description\": \"Overall look description\",\n"
+        "      \"items\": {\n"
+        "        \"top\": {\"item\": \"specific item\", \"color\": \"color\", \"why\": \"reasoning\"},\n"
+        "        \"bottom\": {\"item\": \"specific item\", \"color\": \"color\", \"why\": \"reasoning\"},\n"
+        "        \"shoes\": {\"item\": \"specific item\", \"color\": \"color\", \"why\": \"reasoning\"},\n"
+        "        \"accessories\": [{\"item\": \"accessory\", \"why\": \"reasoning\"}]\n"
+        "      },\n"
+        "      \"styling_tips\": [\"tip1\", \"tip2\"],\n"
+        "      \"budget_estimate\": \"price range\",\n"
+        "      \"occasion_fit\": \"how it fits the occasion\"\n"
+        "    }\n"
+        "  ],\n"
+        "  \"general_styling_advice\": [\"advice1\", \"advice2\"],\n"
+        "  \"shopping_tips\": [\"tip1\", \"tip2\"],\n"
+        "  \"image_generation_prompt\": \"Detailed description for AI image generation\"\n"
+        "}\n\n"
+        "Focus on practical, achievable recommendations that build confidence."
+    ),
+    tools=[WebSearchTool()]
+)
 
-@app.post("/format")
-async def format_newsletter(request: FormatRequest):
-    raw_content = request.raw_content
-    topics = request.topics
+@app.post("/analyze-photo")
+async def analyze_photo(request: FashionAnalysisRequest):
+    """Analyze uploaded photo for fashion styling recommendations"""
+    try:
+        if not request.photo_url:
+            return {"error": "No photo URL provided."}
+        
+        # Create detailed prompt for fashion analysis
+        user_prompt = (
+            f"Please analyze this photo for fashion styling purposes.\n\n"
+            f"Photo URL: {request.photo_url}\n\n"
+            f"User Preferences: {request.user_preferences}\n"
+            f"Occasion: {request.occasion}\n"
+            f"Additional Constraints: {request.constraints or 'None'}\n\n"
+            f"Provide a comprehensive fashion analysis following the specified JSON format."
+        )
+        
+        # Run the fashion analysis agent
+        result = await Runner.run(fashion_analysis_agent, user_prompt)
+        analysis_result = result.final_output
+        
+        return {"analysis": analysis_result}
     
-    if not raw_content:
-        return {"error": "No content provided."}
+    except Exception as e:
+        print(f"Error in photo analysis: {str(e)}", file=sys.stderr)
+        raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
+
+@app.post("/recommend-outfit")
+async def recommend_outfit(request: OutfitRecommendationRequest):
+    """Generate specific outfit recommendations based on analysis"""
+    try:
+        if not request.analysis_result:
+            return {"error": "No analysis result provided."}
+        
+        # Create detailed prompt for outfit recommendations
+        user_prompt = (
+            f"Based on the following fashion analysis, create specific outfit recommendations:\n\n"
+            f"ANALYSIS RESULTS:\n{request.analysis_result}\n\n"
+            f"USER PREFERENCES: {request.user_preferences}\n"
+            f"OCCASION: {request.occasion}\n"
+            f"BUDGET RANGE: {request.budget_range}\n\n"
+            f"Please provide 3 complete outfit recommendations following the specified JSON format. "
+            f"Include specific items, brands, styling tips, and an image generation prompt for visualizing the user in the recommended outfits."
+        )
+        
+        # Run the outfit recommendation agent
+        result = await Runner.run(outfit_recommendation_agent, user_prompt)
+        recommendations = result.final_output
+        
+        return {"recommendations": recommendations}
     
-    # Create formatting prompt
-    topics_list = ", ".join(topics)
-    user_prompt = f"Transform this research content into a beautifully formatted newsletter about {topics_list}. Apply professional markdown formatting:\n\n{raw_content}"
-    
-    # Run the formatting agent
-    result = await Runner.run(formatting_agent, user_prompt)
-    formatted_content = result.final_output
-    
-    return {"content": formatted_content}
+    except Exception as e:
+        print(f"Error in outfit recommendations: {str(e)}", file=sys.stderr)
+        raise HTTPException(status_code=500, detail=f"Recommendation failed: {str(e)}")
 
 # IMPORTANT: Handler for Vercel serverless functions
 # Vercel's Python runtime will automatically handle FastAPI apps

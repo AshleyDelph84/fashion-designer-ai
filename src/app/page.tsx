@@ -1,35 +1,15 @@
 "use client";
 
-import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { Bot, Code, Zap, Server } from "lucide-react";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Camera, Sparkles, User, Palette, ShoppingBag, Heart } from "lucide-react";
 
 export default function HomePage() {
-  const [topics, setTopics] = useState('');
   const router = useRouter();
 
-  const handleTopicChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    setTopics(event.target.value);
-  };
-
-  const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const trimmedTopics = topics.trim();
-    if (trimmedTopics === '') {
-      // Optionally, show an error message if topics are empty
-      return;
-    }
-    const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
-    
-    // Split topics by comma, then encode each one individually
-    const individualTopics = trimmedTopics.split(',').map(topic => topic.trim()).filter(topic => topic !== '');
-    const encodedTopicString = individualTopics.map(topic => topic.replace(/ /g, '+')).join('~');
-
-    const fullSlug = `${today}-${encodedTopicString}`;
-    router.push(`/newsletter/${fullSlug}`);
+  const handleGetStarted = () => {
+    router.push('/sign-up');
   };
 
   return (
@@ -38,13 +18,13 @@ export default function HomePage() {
       <header className="container mx-auto px-4 sm:px-6 lg:px-8 py-6">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-2">
-            <Bot className="h-8 w-8 text-pink-400" />
-            <h1 className="text-2xl font-bold">Serverless Agent Architecture</h1>
+            <Sparkles className="h-8 w-8 text-pink-400" />
+            <h1 className="text-2xl font-bold">AI Fashion Guru</h1>
           </div>
           <div className="flex items-center space-x-4">
-            <a href="https://github.com/brookr/serverless-agents" target="_blank" rel="noopener noreferrer" className="text-slate-400 hover:text-white">
-              GitHub
-            </a>
+            <Button variant="outline" className="border-slate-600 text-slate-300 hover:bg-slate-700" onClick={() => router.push('/sign-in')}>
+              Sign In
+            </Button>
           </div>
         </div>
       </header>
@@ -54,153 +34,142 @@ export default function HomePage() {
         <section className="grid md:grid-cols-2 gap-12 items-center">
           <div className="space-y-6">
             <h2 className="text-4xl sm:text-5xl md:text-6xl font-extrabold tracking-tight">
-              Build AI Apps with
+              Your Personal
               <br />
-              <span className="text-pink-400">Serverless Agents</span>
+              <span className="text-pink-400">AI Fashion Stylist</span>
             </h2>
             <p className="text-lg sm:text-xl text-slate-400 max-w-xl">
-              A production-ready starter for building scalable AI applications with Python agents on Vercel, 
-              orchestrated by Inngest, and powered by Next.js. Deploy AI workflows that scale automatically.
+              Upload your photo and get personalized outfit recommendations with AI-generated visualizations. 
+              Professional styling advice tailored to your body shape, skin tone, and style preferences.
             </p>
             <div className="flex flex-wrap gap-4">
-              <a href="https://github.com/brookr/serverless-agents" target="_blank" rel="noopener noreferrer">
-                <Button variant="outline" className="border-slate-600 text-slate-800 hover:text-slate-900 hover:bg-slate-200">
-                  <Code className="mr-2 h-4 w-4" />
-                  View on GitHub
-                </Button>
-              </a>
-              <a href="https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fbrookr%2Fserverless-agents&env=OPENAI_API_KEY,NEWSLETTER_READ_WRITE_TOKEN&envDescription=Configure%20your%20AI%20agents%20and%20storage&envLink=https%3A%2F%2Fgithub.com%2Fbrookr%2Fserverless-agents%23environment-setup&project-name=serverless-agents&repository-name=serverless-agents" target="_blank" rel="noopener noreferrer">
-                <Button className="bg-pink-500 hover:bg-pink-600 text-white">
-                  <svg className="w-4 h-4 mr-2" viewBox="0 0 76 76" fill="currentColor">
-                    <path d="M37.5274 0L75.0548 65H0L37.5274 0Z" />
-                  </svg>
-                  Deploy with Vercel
-                </Button>
-              </a>
-              <a href="https://github.com/brookr/serverless-agents#readme" target="_blank" rel="noopener noreferrer">
-                <Button variant="outline" className="border-slate-600 text-slate-800 hover:text-slate-900 hover:bg-slate-200">
-                  📚 Read the Docs
-                </Button>
-              </a>
+              <Button className="bg-pink-500 hover:bg-pink-600 text-white text-lg px-8 py-3" onClick={handleGetStarted}>
+                <Camera className="mr-2 h-5 w-5" />
+                Get Your Style Analysis
+              </Button>
+              <Button variant="outline" className="border-slate-600 text-slate-300 hover:bg-slate-700 text-lg px-8 py-3">
+                <User className="mr-2 h-5 w-5" />
+                See How It Works
+              </Button>
             </div>
           </div>
-          <div className="hidden md:block relative aspect-video bg-slate-800 .rounded-xl shadow-2xl overflow-hidden">
-            {/* Architecture visualization */}
+          <div className="hidden md:block relative aspect-video bg-slate-800 rounded-xl shadow-2xl overflow-hidden">
+            {/* Fashion visualization */}
             <div className="absolute inset-0 flex items-center justify-center">
               <div className="grid grid-cols-2 gap-4 p-8">
                 <div className="flex flex-col items-center">
-                  <Bot className="h-12 w-12 text-pink-400 mb-2" />
-                  <span className="text-xs text-slate-400">AI Agents</span>
+                  <Camera className="h-12 w-12 text-pink-400 mb-2" />
+                  <span className="text-xs text-slate-400">Photo Analysis</span>
                 </div>
                 <div className="flex flex-col items-center">
-                  <Server className="h-12 w-12 text-indigo-400 mb-2" />
-                  <span className="text-xs text-slate-400">Inngest</span>
+                  <Sparkles className="h-12 w-12 text-purple-400 mb-2" />
+                  <span className="text-xs text-slate-400">AI Styling</span>
                 </div>
                 <div className="flex flex-col items-center">
-                  <Zap className="h-12 w-12 text-yellow-400 mb-2" />
-                  <span className="text-xs text-slate-400">Vercel</span>
+                  <Palette className="h-12 w-12 text-indigo-400 mb-2" />
+                  <span className="text-xs text-slate-400">Color Matching</span>
                 </div>
                 <div className="flex flex-col items-center">
-                  <Code className="h-12 w-12 text-blue-400 mb-2" />
-                  <span className="text-xs text-slate-400">Next.js</span>
+                  <ShoppingBag className="h-12 w-12 text-emerald-400 mb-2" />
+                  <span className="text-xs text-slate-400">Outfit Suggestions</span>
                 </div>
               </div>
             </div>
             <div className="absolute top-1/4 left-1/4 w-24 h-24 bg-pink-500/20 rounded-full filter blur-2xl animate-blob animation-delay-2000"></div>
-            <div className="absolute top-1/2 right-1/4 w-32 h-32 bg-indigo-500/20 rounded-full filter blur-2xl animate-blob animation-delay-4000"></div>
+            <div className="absolute top-1/2 right-1/4 w-32 h-32 bg-purple-500/20 rounded-full filter blur-2xl animate-blob animation-delay-4000"></div>
           </div>
         </section>
 
-        {/* Live Demo Section */}
+        {/* How It Works Section */}
         <section className="py-16 md:py-24">
           <div className="text-center mb-12">
-            <h3 className="text-3xl font-bold mb-4">Try the Live Demo</h3>
+            <h3 className="text-3xl font-bold mb-4">How It Works</h3>
             <p className="text-slate-400 max-w-2xl mx-auto">
-              This starter includes a newsletter generator as an example implementation. 
-              Try it out to see the serverless agent architecture in action.
+              Our AI-powered fashion analysis provides professional styling advice in minutes. 
+              Simply upload your photo and get personalized recommendations.
             </p>
           </div>
-          <Card className="bg-slate-800/90 border-slate-700 shadow-xl">
-            <CardHeader className="text-center">
-              <CardTitle className="text-3xl font-bold text-white">Newsletter Generator Demo</CardTitle>
-              <CardDescription className="text-slate-400 mt-2 text-md">
-                Enter topics to generate an AI-powered newsletter using our multi-agent workflow.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="px-6 sm:px-8">
-              <form className="space-y-6" onSubmit={handleSubmit}>
-                <div>
-                  <label htmlFor="topicsInput" className="block text-sm font-medium text-slate-300 mb-2">
-                    Topics (comma-separated)
-                  </label>
-                  <Input
-                    id="topicsInput"
-                    name="topics"
-                    type="text"
-                    value={topics}
-                    onChange={handleTopicChange}
-                    placeholder="e.g., Artificial Intelligence, Climate Tech, Quantum Computing"
-                    className="bg-slate-700 border-slate-600 placeholder-slate-500 text-white focus:ring-pink-500 focus:border-pink-500 h-12 text-lg"
-                  />
+          <div className="grid md:grid-cols-3 gap-8">
+            <Card className="bg-slate-800/50 border-slate-700 text-center">
+              <CardHeader>
+                <div className="mx-auto mb-4 w-16 h-16 bg-pink-500/20 rounded-full flex items-center justify-center">
+                  <Camera className="h-8 w-8 text-pink-400" />
                 </div>
-                <Button type="submit" className="w-full bg-pink-500 hover:bg-pink-600 text-lg py-3 h-auto">
-                  <Bot className="mr-2 h-5 w-5" /> Generate Newsletter
-                </Button>
-              </form>
-            </CardContent>
-            <CardFooter className="text-sm text-slate-500 px-6 sm:px-8 pt-6 text-center">
-              <p>Watch how the agents research topics and format the results in real-time.</p>
-            </CardFooter>
-          </Card>
+                <CardTitle className="text-xl text-white">1. Upload Your Photo</CardTitle>
+                <CardDescription className="text-slate-400">
+                  Take or upload a full-body photo. Our AI analyzes your body shape, proportions, and current style.
+                </CardDescription>
+              </CardHeader>
+            </Card>
+            <Card className="bg-slate-800/50 border-slate-700 text-center">
+              <CardHeader>
+                <div className="mx-auto mb-4 w-16 h-16 bg-purple-500/20 rounded-full flex items-center justify-center">
+                  <Sparkles className="h-8 w-8 text-purple-400" />
+                </div>
+                <CardTitle className="text-xl text-white">2. AI Analysis</CardTitle>
+                <CardDescription className="text-slate-400">
+                  Advanced AI determines your skin tone, body type, and style preferences to create personalized recommendations.
+                </CardDescription>
+              </CardHeader>
+            </Card>
+            <Card className="bg-slate-800/50 border-slate-700 text-center">
+              <CardHeader>
+                <div className="mx-auto mb-4 w-16 h-16 bg-emerald-500/20 rounded-full flex items-center justify-center">
+                  <ShoppingBag className="h-8 w-8 text-emerald-400" />
+                </div>
+                <CardTitle className="text-xl text-white">3. Get Styled</CardTitle>
+                <CardDescription className="text-slate-400">
+                  Receive outfit recommendations with visualizations showing you in the new styles, complete with shopping links.
+                </CardDescription>
+              </CardHeader>
+            </Card>
+          </div>
         </section>
 
-        {/* Architecture Features Section */}
+        {/* Features Section */}
         <section className="py-16 md:py-24 text-center">
-          <h3 className="text-3xl font-bold mb-4">Built for Modern AI Applications</h3>
+          <h3 className="text-3xl font-bold mb-4">Why Choose AI Fashion Guru?</h3>
           <p className="text-slate-400 mb-12 max-w-2xl mx-auto">
-            This starter provides everything you need to build production-ready AI applications with serverless architecture.
+            Professional styling advice that understands your unique features and preferences, 
+            available 24/7 at a fraction of traditional stylist costs.
           </p>
           <div className="grid md:grid-cols-3 gap-8">
             <div className="flex flex-col items-center p-6 bg-slate-800/50 rounded-lg border border-slate-700/50">
-              <Server className="h-12 w-12 text-pink-400 mb-4" />
-              <h4 className="text-xl font-semibold mb-2">Serverless Agents</h4>
-              <p className="text-slate-400 text-sm">Python FastAPI agents deploy automatically to Vercel Functions.</p>
+              <User className="h-12 w-12 text-pink-400 mb-4" />
+              <h4 className="text-xl font-semibold mb-2">Personalized Analysis</h4>
+              <p className="text-slate-400 text-sm">AI analyzes your unique body shape, skin tone, and style to create recommendations just for you.</p>
             </div>
             <div className="flex flex-col items-center p-6 bg-slate-800/50 rounded-lg border border-slate-700/50">
-              <Zap className="h-12 w-12 text-pink-400 mb-4" />
-              <h4 className="text-xl font-semibold mb-2">Long-Running Workflows</h4>
-              <p className="text-slate-400 text-sm">Inngest handles complex workflows that exceed typical timeouts.</p>
+              <Heart className="h-12 w-12 text-pink-400 mb-4" />
+              <h4 className="text-xl font-semibold mb-2">Confidence Boost</h4>
+              <p className="text-slate-400 text-sm">See yourself in new outfits before you buy, ensuring you love how you look.</p>
             </div>
             <div className="flex flex-col items-center p-6 bg-slate-800/50 rounded-lg border border-slate-700/50">
-              <Code className="h-12 w-12 text-pink-400 mb-4" />
-              <h4 className="text-xl font-semibold mb-2">Full-Stack TypeScript</h4>
-              <p className="text-slate-400 text-sm">Type-safe from frontend to backend with Next.js App Router.</p>
+              <Palette className="h-12 w-12 text-pink-400 mb-4" />
+              <h4 className="text-xl font-semibold mb-2">Style Education</h4>
+              <p className="text-slate-400 text-sm">Learn why certain styles work for you with detailed explanations and styling tips.</p>
             </div>
           </div>
         </section>
 
         {/* Get Started Section */}
         <section className="py-16 md:py-24">
-          <Card className="bg-gradient-to-r from-pink-500/10 to-indigo-500/10 border-slate-700">
+          <Card className="bg-gradient-to-r from-pink-500/10 to-purple-500/10 border-slate-700">
             <CardContent className="p-8 text-center">
-              <h3 className="text-2xl font-bold mb-4 text-white">Ready to Build?</h3>
+              <h3 className="text-2xl font-bold mb-4 text-white">Ready to Transform Your Style?</h3>
               <p className="text-slate-400 mb-6 max-w-xl mx-auto">
-                Clone this repository and start building your own AI-powered application with our serverless architecture.
+                Join thousands who have discovered their perfect style with AI-powered fashion advice. 
+                Start with 3 free outfit analyses!
               </p>
               <div className="flex flex-wrap gap-4 justify-center">
-                <a href="https://github.com/brookr/serverless-agents" target="_blank" rel="noopener noreferrer">
-                  <Button className="bg-pink-500 hover:bg-pink-600">
-                    Get Started →
-                  </Button>
-                </a>
-                <a href="https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fbrookr%2Fserverless-agents&env=OPENAI_API_KEY,NEWSLETTER_READ_WRITE_TOKEN&envDescription=Configure%20your%20AI%20agents%20and%20storage&envLink=https%3A%2F%2Fgithub.com%2Fbrookr%2Fserverless-agents%23environment-setup&project-name=serverless-agents&repository-name=serverless-agents" target="_blank" rel="noopener noreferrer">
-                  <Button variant="outline" className="border-slate-600 text-slate-300 hover:bg-slate-700">
-                    <svg className="w-4 h-4 mr-2" viewBox="0 0 76 76" fill="currentColor">
-                      <path d="M37.5274 0L75.0548 65H0L37.5274 0Z" />
-                    </svg>
-                    Deploy with Vercel
-                  </Button>
-                </a>
+                <Button className="bg-pink-500 hover:bg-pink-600 text-lg px-8 py-3" onClick={handleGetStarted}>
+                  <Sparkles className="mr-2 h-5 w-5" />
+                  Start Free Trial
+                </Button>
+                <Button variant="outline" className="border-slate-600 text-slate-300 hover:bg-slate-700 text-lg px-8 py-3">
+                  <Heart className="mr-2 h-5 w-5" />
+                  See Example Results
+                </Button>
               </div>
             </CardContent>
           </Card>
@@ -209,37 +178,8 @@ export default function HomePage() {
 
       {/* Footer */}
       <footer className="py-8 text-center border-t border-slate-700/50">
-        <p className="text-slate-500">Released under CC0 License • Build amazing AI applications</p>
+        <p className="text-slate-500">© 2024 AI Fashion Guru • Transform your style with AI</p>
       </footer>
     </div>
   );
 }
-
-// Add some simple CSS animations for the blobs in globals.css if you want them to move
-// For example, in src/app/globals.css:
-/*
-@keyframes blob {
-  0% {
-    transform: scale(1) translate(0, 0);
-  }
-  33% {
-    transform: scale(1.1) translate(20px, -30px);
-  }
-  66% {
-    transform: scale(0.9) translate(-20px, 20px);
-  }
-  100% {
-    transform: scale(1) translate(0, 0);
-  }
-}
-
-.animate-blob {
-  animation: blob 15s infinite cubic-bezier(0.68, -0.55, 0.27, 1.55);
-}
-.animation-delay-2000 {
-  animation-delay: 2s;
-}
-.animation-delay-4000 {
-  animation-delay: 4s;
-}
-*/

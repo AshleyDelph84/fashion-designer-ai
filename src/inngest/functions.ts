@@ -1,27 +1,35 @@
 import { inngest } from "./client";
 import { put } from "@vercel/blob";
-// Removed uuid as slug should be unique enough with date and topics
 
-const NEWSLETTER_READ_WRITE_TOKEN = process.env.NEWSLETTER_READ_WRITE_TOKEN;
-if (!NEWSLETTER_READ_WRITE_TOKEN) {
+const FASHION_BLOB_TOKEN = process.env.NEWSLETTER_READ_WRITE_TOKEN; // Reusing the same token for now
+if (!FASHION_BLOB_TOKEN) {
   throw new Error('NEWSLETTER_READ_WRITE_TOKEN env variable is required');
 }
 
-// Define data structure for the initial event
-interface NewsletterGenerateRequestedData {
-  slug: string;
-  blobKey: string;
-  topics: string[];
+// Define data structure for fashion analysis workflow
+interface FashionAnalysisRequestedData {
+  userId: string;
+  sessionId: string;
+  photoUrl: string;
+  userPreferences: {
+    styleTypes: string[];
+    bodyType: string;
+    occasions: string[];
+    colors: string[];
+    budget: string;
+  };
+  occasion: string;
+  constraints?: string;
 }
 
-// Main Inngest function with multi-step workflow
-export const generateNewsletter = inngest.createFunction(
-  { id: "generate-newsletter" },
-  { event: "newsletter/generate.requested" },
-  async ({ event, step }: { event: { data: NewsletterGenerateRequestedData }; step: unknown }) => {
-    const { topics, slug, blobKey } = event.data;
-    if (!topics || !slug || !blobKey) {
-      throw new Error("Missing topics, slug, or blobKey in event data.");
+// Main Inngest function for fashion analysis workflow
+export const generateFashionRecommendations = inngest.createFunction(
+  { id: "generate-fashion-recommendations" },
+  { event: "fashion/analysis.requested" },
+  async ({ event, step }: { event: { data: FashionAnalysisRequestedData }; step: unknown }) => {
+    const { userId, sessionId, photoUrl, userPreferences, occasion, constraints } = event.data;
+    if (!userId || !sessionId || !photoUrl || !userPreferences || !occasion) {
+      throw new Error("Missing required data in event payload.");
     }
 
     function assertStepHasRun(s: unknown): asserts s is { run: (name: string, fn: () => Promise<unknown>) => Promise<unknown> } {
@@ -31,35 +39,69 @@ export const generateNewsletter = inngest.createFunction(
     }
     assertStepHasRun(step);
 
-    // Step 1: Call Python Agent
-    const rawAgentContentUnknown = await step.run("call-python-agent", () => callPythonAgent(topics, slug));
-    if (typeof rawAgentContentUnknown !== 'string') {
-      throw new Error('Python agent did not return a string');
+    // Step 1: Analyze Photo with Fashion Analysis Agent
+    const analysisResultUnknown = await step.run("analyze-photo", () => 
+      analyzeFashionPhoto(photoUrl, userPreferences, occasion, constraints, sessionId)
+    );
+    if (typeof analysisResultUnknown !== 'string') {
+      throw new Error('Fashion analysis agent did not return a string');
     }
-    const rawAgentContent = rawAgentContentUnknown;
+    const analysisResult = analysisResultUnknown;
 
-    // Step 2: Format Newsletter with Markdown Agent
-    const formattedContentUnknown = await step.run("format-newsletter", () => formatNewsletter(rawAgentContent, topics, slug));
-    if (typeof formattedContentUnknown !== 'string') {
-      throw new Error('Formatting agent did not return a string');
+    // Step 2: Generate Outfit Recommendations
+    const recommendationsUnknown = await step.run("generate-recommendations", () => 
+      generateOutfitRecommendations(analysisResult, userPreferences, occasion, userPreferences.budget, sessionId)
+    );
+    if (typeof recommendationsUnknown !== 'string') {
+      throw new Error('Outfit recommendation agent did not return a string');
     }
-    const formattedContent = formattedContentUnknown;
+    const recommendations = recommendationsUnknown;
 
-    // Step 3: Save Newsletter to Blob
-    const finalBlobUnknown = await step.run("save-to-blob", () => saveNewsletterToBlob(blobKey, formattedContent, slug));
-    if (!finalBlobUnknown || typeof finalBlobUnknown !== 'object' || typeof (finalBlobUnknown as { url?: unknown }).url !== 'string') {
+    // Step 3: Generate Visualization Images with Flux-kontext
+    const visualizationsUnknown = await step.run("generate-visualizations", () => 
+      generateOutfitVisualizations(photoUrl, JSON.parse(recommendations), sessionId)
+    );
+    const visualizations = visualizationsUnknown as { visualizations: Array<{ outfit_name: string; visualization?: { image_url: string }; error?: string }> };
+
+    // Step 4: Save Results to Blob Storage
+    const resultsData = {
+      userId,
+      sessionId,
+      originalPhoto: photoUrl,
+      analysis: analysisResult,
+      recommendations: recommendations,
+      visualizations: visualizations.visualizations,
+      timestamp: new Date().toISOString(),
+      userPreferences,
+      occasion,
+      constraints
+    };
+
+    const blobKey = `fashion-results/${userId}/${sessionId}.json`;
+    const savedResultsUnknown = await step.run("save-results", () => 
+      saveFashionResults(blobKey, JSON.stringify(resultsData, null, 2), sessionId)
+    );
+    if (!savedResultsUnknown || typeof savedResultsUnknown !== 'object' || typeof (savedResultsUnknown as { url?: unknown }).url !== 'string') {
       throw new Error('Blob result missing url');
     }
-    const finalBlob = finalBlobUnknown as { url: string };
+    const savedResults = savedResultsUnknown as { url: string };
 
-    return { url: finalBlob.url, message: `Newsletter generated and saved for ${slug}` };
+    return { 
+      success: true,
+      sessionId,
+      resultsUrl: savedResults.url,
+      analysis: JSON.parse(analysisResult),
+      recommendations: JSON.parse(recommendations),
+      visualizations: visualizations.visualizations,
+      message: `Fashion recommendations and visualizations generated for session ${sessionId}` 
+    };
   }
 );
 
-// --- Step implementations below ---
+// --- Fashion Processing Step Implementations ---
 
-// Helper function to get the Python agent URL
-function getPythonAgentUrl(): string {
+// Helper function to get the Python fashion agents URL
+function getFashionAgentUrl(): string {
   // Use custom APP_URL if set (recommended approach)
   if (process.env.APP_URL) {
     return `${process.env.APP_URL}/api/agents`;
@@ -81,104 +123,162 @@ function getPythonAgentUrl(): string {
   }
   
   // Fallback
-  console.warn('[Inngest] No suitable URL found for Python agent, using deployment URL');
+  console.warn('[Inngest] No suitable URL found for fashion agent, using deployment URL');
   return `https://${process.env.VERCEL_URL}/api/agents`;
 }
 
-async function callPythonAgent(topics: string[], slug: string) {
-  const pythonAgentUrl = getPythonAgentUrl();
+async function analyzeFashionPhoto(
+  photoUrl: string, 
+  userPreferences: Record<string, unknown>, 
+  occasion: string, 
+  constraints: string | undefined, 
+  sessionId: string
+) {
+  const fashionAgentUrl = getFashionAgentUrl();
   
   try {
-    const response = await fetch(`${pythonAgentUrl}/research`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ topics }),
-    });
-
-    if (!response.ok) {
-      console.error(`[Inngest] Research agent request failed for slug ${slug}. Status: ${response.status}`);
-      throw new Error(`Research agent request failed with status ${response.status}`);
-    }
-
-    const data = await response.json();
-    const content = data.content;
-    
-    if (!content) {
-      throw new Error('Research agent returned no content');
-    }
-
-    return content;
-  } catch (error) {
-    console.error(`[Inngest] Research agent error for slug ${slug}:`, error);
-    throw error;
-  }
-}
-
-async function formatNewsletter(rawContent: string, topics: string[], slug: string) {
-  // Build the appropriate URL based on environment
-  let pythonAgentUrl: string;
-  if (!process.env.VERCEL) {
-    // Local development
-    pythonAgentUrl = 'http://localhost:8000';
-  } else if (process.env.VERCEL_ENV === 'production' && process.env.VERCEL_PROJECT_PRODUCTION_URL) {
-    // Production environment - use the production URL
-    pythonAgentUrl = `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}/api/agents`;
-  } else if (process.env.VERCEL_BRANCH_URL) {
-    // Preview environment - use the branch URL which is more stable than VERCEL_URL
-    pythonAgentUrl = `https://${process.env.VERCEL_BRANCH_URL}/api/agents`;
-  } else {
-    // Fallback to deployment URL if nothing else is available
-    pythonAgentUrl = `https://${process.env.VERCEL_URL}/api/agents`;
-  }
-  
-  try {
-    const response = await fetch(`${pythonAgentUrl}/format`, {
+    // Use Gemini agent for photo analysis
+    const response = await fetch(`${fashionAgentUrl.replace('/api/agents', '/api/gemini')}/analyze-photo`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ 
-        raw_content: rawContent,
-        topics: topics 
+        photo_url: photoUrl,
+        user_preferences: userPreferences,
+        occasion: occasion,
+        constraints: constraints
       }),
     });
 
     if (!response.ok) {
-      console.error(`[Inngest] Formatting agent request failed for slug ${slug}. Status: ${response.status}`);
-      throw new Error(`Formatting agent request failed with status ${response.status}`);
+      console.error(`[Inngest] Gemini fashion analysis request failed for session ${sessionId}. Status: ${response.status}`);
+      throw new Error(`Gemini fashion analysis request failed with status ${response.status}`);
     }
 
     const data = await response.json();
-    const content = data.content;
+    const analysis = data.analysis;
     
-    if (!content) {
-      throw new Error('Formatting agent returned no content');
+    if (!analysis) {
+      throw new Error('Gemini fashion analysis agent returned no content');
     }
 
-    return content;
+    return analysis;
   } catch (error) {
-    console.error(`[Inngest] Formatting agent error for slug ${slug}:`, error);
+    console.error(`[Inngest] Gemini fashion analysis error for session ${sessionId}:`, error);
     throw error;
   }
 }
 
-async function saveNewsletterToBlob(blobKey: string, rawAgentContent: string, slug: string) {
-  if (typeof rawAgentContent !== "string") {
-    console.error(`[Inngest] Invalid content type for slug ${slug}. Expected string, got ${typeof rawAgentContent}`);
-    throw new Error("Invalid content type from agent for saving to blob.");
+async function generateOutfitRecommendations(
+  analysisResult: string, 
+  userPreferences: Record<string, unknown>, 
+  occasion: string, 
+  budgetRange: string, 
+  sessionId: string
+) {
+  const fashionAgentUrl = getFashionAgentUrl();
+  
+  try {
+    // Use Gemini agent for outfit recommendations
+    const response = await fetch(`${fashionAgentUrl.replace('/api/agents', '/api/gemini')}/recommend-outfit`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ 
+        analysis_result: analysisResult,
+        user_preferences: userPreferences,
+        occasion: occasion,
+        budget_range: budgetRange
+      }),
+    });
+
+    if (!response.ok) {
+      console.error(`[Inngest] Gemini outfit recommendation request failed for session ${sessionId}. Status: ${response.status}`);
+      throw new Error(`Gemini outfit recommendation request failed with status ${response.status}`);
+    }
+
+    const data = await response.json();
+    const recommendations = data.recommendations;
+    
+    if (!recommendations) {
+      throw new Error('Gemini outfit recommendation agent returned no content');
+    }
+
+    return recommendations;
+  } catch (error) {
+    console.error(`[Inngest] Gemini outfit recommendation error for session ${sessionId}:`, error);
+    throw error;
+  }
+}
+
+async function generateOutfitVisualizations(
+  userPhotoUrl: string,
+  recommendations: Record<string, unknown>,
+  sessionId: string
+) {
+  const fashionAgentUrl = getFashionAgentUrl();
+  
+  try {
+    // Extract outfit recommendations from the recommendations object
+    const outfitRecommendations = recommendations?.outfit_recommendations as Array<Record<string, unknown>>;
+    
+    if (!outfitRecommendations || !Array.isArray(outfitRecommendations)) {
+      console.warn(`[Inngest] No outfit recommendations found for session ${sessionId}`);
+      return { visualizations: [] };
+    }
+
+    // Use Flux agent to generate outfit visualizations
+    const response = await fetch(`${fashionAgentUrl.replace('/api/agents', '/api/flux')}/generate-multiple-outfits`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ 
+        user_photo_url: userPhotoUrl,
+        outfits: outfitRecommendations,
+        style_prompt: "professional fashion photography, high quality, realistic lighting",
+        background: "modern minimalist studio"
+      }),
+    });
+
+    if (!response.ok) {
+      console.error(`[Inngest] Flux visualization request failed for session ${sessionId}. Status: ${response.status}`);
+      // Don't throw error - continue without visualizations
+      return { visualizations: [] };
+    }
+
+    const data = await response.json();
+    
+    if (!data.success) {
+      console.error(`[Inngest] Flux visualization failed for session ${sessionId}:`, data);
+      return { visualizations: [] };
+    }
+
+    return data;
+  } catch (error) {
+    console.error(`[Inngest] Flux visualization error for session ${sessionId}:`, error);
+    // Don't throw error - continue without visualizations
+    return { visualizations: [] };
+  }
+}
+
+async function saveFashionResults(blobKey: string, resultsContent: string, sessionId: string) {
+  if (typeof resultsContent !== "string") {
+    console.error(`[Inngest] Invalid content type for session ${sessionId}. Expected string, got ${typeof resultsContent}`);
+    throw new Error("Invalid content type for saving fashion results to blob.");
   }
   try {
-    const blob = await put(blobKey, rawAgentContent, {
+    const blob = await put(blobKey, resultsContent, {
       access: "public",
-      contentType: "text/markdown",
-      token: NEWSLETTER_READ_WRITE_TOKEN,
+      contentType: "application/json",
+      token: FASHION_BLOB_TOKEN,
       allowOverwrite: true,
     });
     return blob;
   } catch (error) {
-    console.error(`[Inngest] Error saving to blob for slug ${slug}:`, error);
+    console.error(`[Inngest] Error saving fashion results to blob for session ${sessionId}:`, error);
     throw error;
   }
 }
