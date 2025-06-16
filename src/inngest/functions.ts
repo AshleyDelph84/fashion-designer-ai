@@ -1,10 +1,20 @@
 import { inngest } from "./client";
 import { put } from "@vercel/blob";
+import Replicate from "replicate";
 
-const FASHION_BLOB_TOKEN = process.env.NEWSLETTER_READ_WRITE_TOKEN; // Reusing the same token for now
+const FASHION_BLOB_TOKEN = process.env.BLOB_READ_WRITE_TOKEN;
 if (!FASHION_BLOB_TOKEN) {
-  throw new Error('NEWSLETTER_READ_WRITE_TOKEN env variable is required');
+  throw new Error('BLOB_READ_WRITE_TOKEN env variable is required');
 }
+
+const REPLICATE_API_TOKEN = process.env.REPLICATE_API_TOKEN;
+if (!REPLICATE_API_TOKEN) {
+  throw new Error('REPLICATE_API_TOKEN env variable is required');
+}
+
+const replicate = new Replicate({
+  auth: REPLICATE_API_TOKEN,
+});
 
 // Define data structure for fashion analysis workflow
 interface FashionAnalysisRequestedData {
@@ -20,6 +30,7 @@ interface FashionAnalysisRequestedData {
   };
   occasion: string;
   constraints?: string;
+  textDescription?: string;
 }
 
 // Main Inngest function for fashion analysis workflow
@@ -27,8 +38,14 @@ export const generateFashionRecommendations = inngest.createFunction(
   { id: "generate-fashion-recommendations" },
   { event: "fashion/analysis.requested" },
   async ({ event, step }: { event: { data: FashionAnalysisRequestedData }; step: unknown }) => {
-    const { userId, sessionId, photoUrl, userPreferences, occasion, constraints } = event.data;
+    const { userId, sessionId, photoUrl, userPreferences, occasion, constraints, textDescription } = event.data;
+    console.log(`[Inngest] Starting fashion analysis workflow for session ${sessionId}`);
+    console.log(`[Inngest] Photo URL: ${photoUrl}`);
+    console.log(`[Inngest] User ID: ${userId}`);
+    console.log(`[Inngest] Occasion: ${occasion}`);
+    
     if (!userId || !sessionId || !photoUrl || !userPreferences || !occasion) {
+      console.error(`[Inngest] Missing required data for session ${sessionId}:`, { userId: !!userId, sessionId: !!sessionId, photoUrl: !!photoUrl, userPreferences: !!userPreferences, occasion: !!occasion });
       throw new Error("Missing required data in event payload.");
     }
 
@@ -41,7 +58,7 @@ export const generateFashionRecommendations = inngest.createFunction(
 
     // Step 1: Analyze Photo with Fashion Analysis Agent
     const analysisResultUnknown = await step.run("analyze-photo", () => 
-      analyzeFashionPhoto(photoUrl, userPreferences, occasion, constraints, sessionId)
+      analyzeFashionPhoto(photoUrl, userPreferences, occasion, constraints, sessionId, textDescription)
     );
     if (typeof analysisResultUnknown !== 'string') {
       throw new Error('Fashion analysis agent did not return a string');
@@ -59,7 +76,7 @@ export const generateFashionRecommendations = inngest.createFunction(
 
     // Step 3: Generate Visualization Images with Flux-kontext
     const visualizationsUnknown = await step.run("generate-visualizations", () => 
-      generateOutfitVisualizations(photoUrl, JSON.parse(recommendations), sessionId)
+      generateOutfitVisualizations(photoUrl, JSON.parse(extractJsonFromMarkdown(recommendations)), sessionId, userPreferences, occasion)
     );
     const visualizations = visualizationsUnknown as { visualizations: Array<{ outfit_name: string; visualization?: { image_url: string }; error?: string }> };
 
@@ -68,8 +85,8 @@ export const generateFashionRecommendations = inngest.createFunction(
       userId,
       sessionId,
       originalPhoto: photoUrl,
-      analysis: analysisResult,
-      recommendations: recommendations,
+      analysis: JSON.parse(extractJsonFromMarkdown(analysisResult)),
+      recommendations: JSON.parse(extractJsonFromMarkdown(recommendations)),
       visualizations: visualizations.visualizations,
       timestamp: new Date().toISOString(),
       userPreferences,
@@ -90,8 +107,8 @@ export const generateFashionRecommendations = inngest.createFunction(
       success: true,
       sessionId,
       resultsUrl: savedResults.url,
-      analysis: JSON.parse(analysisResult),
-      recommendations: JSON.parse(recommendations),
+      analysis: JSON.parse(extractJsonFromMarkdown(analysisResult)),
+      recommendations: JSON.parse(extractJsonFromMarkdown(recommendations)),
       visualizations: visualizations.visualizations,
       message: `Fashion recommendations and visualizations generated for session ${sessionId}` 
     };
@@ -99,6 +116,24 @@ export const generateFashionRecommendations = inngest.createFunction(
 );
 
 // --- Fashion Processing Step Implementations ---
+
+// Helper function to extract JSON from markdown code blocks
+function extractJsonFromMarkdown(markdownText: string): string {
+  // Handle case where response is already clean JSON
+  const trimmed = markdownText.trim();
+  if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+    return trimmed;
+  }
+  
+  // Extract JSON from markdown code blocks
+  const jsonMatch = markdownText.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
+  if (jsonMatch && jsonMatch[1]) {
+    return jsonMatch[1].trim();
+  }
+  
+  // If no markdown blocks found, return as-is
+  return markdownText;
+}
 
 // Helper function to get the Python fashion agents URL
 function getFashionAgentUrl(): string {
@@ -132,13 +167,14 @@ async function analyzeFashionPhoto(
   userPreferences: Record<string, unknown>, 
   occasion: string, 
   constraints: string | undefined, 
-  sessionId: string
+  sessionId: string,
+  textDescription?: string
 ) {
   const fashionAgentUrl = getFashionAgentUrl();
   
   try {
-    // Use Gemini agent for photo analysis
-    const response = await fetch(`${fashionAgentUrl.replace('/api/agents', '/api/gemini')}/analyze-photo`, {
+    // Use Google ADK agent for photo analysis
+    const response = await fetch(`${fashionAgentUrl}/analyze-photo`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -147,7 +183,8 @@ async function analyzeFashionPhoto(
         photo_url: photoUrl,
         user_preferences: userPreferences,
         occasion: occasion,
-        constraints: constraints
+        constraints: constraints,
+        text_description: textDescription
       }),
     });
 
@@ -180,8 +217,8 @@ async function generateOutfitRecommendations(
   const fashionAgentUrl = getFashionAgentUrl();
   
   try {
-    // Use Gemini agent for outfit recommendations
-    const response = await fetch(`${fashionAgentUrl.replace('/api/agents', '/api/gemini')}/recommend-outfit`, {
+    // Use Google ADK agent for outfit recommendations
+    const response = await fetch(`${fashionAgentUrl}/recommend-outfit`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -216,10 +253,10 @@ async function generateOutfitRecommendations(
 async function generateOutfitVisualizations(
   userPhotoUrl: string,
   recommendations: Record<string, unknown>,
-  sessionId: string
+  sessionId: string,
+  userPreferences?: Record<string, unknown>,
+  occasion?: string
 ) {
-  const fashionAgentUrl = getFashionAgentUrl();
-  
   try {
     // Extract outfit recommendations from the recommendations object
     const outfitRecommendations = recommendations?.outfit_recommendations as Array<Record<string, unknown>>;
@@ -229,36 +266,89 @@ async function generateOutfitVisualizations(
       return { visualizations: [] };
     }
 
-    // Use Flux agent to generate outfit visualizations
-    const response = await fetch(`${fashionAgentUrl.replace('/api/agents', '/api/flux')}/generate-multiple-outfits`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ 
-        user_photo_url: userPhotoUrl,
-        outfits: outfitRecommendations,
-        style_prompt: "professional fashion photography, high quality, realistic lighting",
-        background: "modern minimalist studio"
-      }),
-    });
-
-    if (!response.ok) {
-      console.error(`[Inngest] Flux visualization request failed for session ${sessionId}. Status: ${response.status}`);
-      // Don't throw error - continue without visualizations
-      return { visualizations: [] };
-    }
-
-    const data = await response.json();
+    const generated_visualizations = [];
     
-    if (!data.success) {
-      console.error(`[Inngest] Flux visualization failed for session ${sessionId}:`, data);
-      return { visualizations: [] };
+    // Generate visualizations for each outfit using direct Replicate API calls
+    for (let i = 0; i < outfitRecommendations.length; i++) {
+      const outfit = outfitRecommendations[i];
+      
+      try {
+        // Create outfit description from the outfit data
+        const outfitItems = outfit.items as Record<string, unknown> || {};
+        const topItem = outfitItems.top as Record<string, unknown> || {};
+        const bottomItem = outfitItems.bottom as Record<string, unknown> || {};
+        const shoesItem = outfitItems.shoes as Record<string, unknown> || {};
+        
+        const outfitDescription = `
+          ${topItem.item || 'shirt'} in ${topItem.color || 'neutral'} color,
+          ${bottomItem.item || 'pants'} in ${bottomItem.color || 'neutral'} color,
+          ${shoesItem.item || 'shoes'} in ${shoesItem.color || 'neutral'} color
+        `.trim();
+        
+        // Flux-kontext-max optimized prompt following official best practices
+        const styleTypes = Array.isArray(userPreferences?.styleTypes) ? (userPreferences.styleTypes as string[]).join(', ') : 'stylish';
+        const occasionStyle = occasion === 'workout' ? 'athletic, confident' : 
+                            occasion === 'date-night' ? 'elegant, romantic' :
+                            occasion === 'work' ? 'professional, polished' : 'fashionable';
+        
+        const prompt = `Change the clothing to ${outfitDescription} while keeping the same facial features, exact same pose, same hair, and same background. Style: ${styleTypes}, ${occasionStyle}. Maintain the original composition and lighting.`;
+        
+        console.log(`[Inngest] Generating outfit visualization ${i + 1} for session ${sessionId} - OUTFIT EDITING MODE`);
+        console.log(`[Inngest] Outfit description: ${outfitDescription}`);
+        console.log(`[Inngest] Style preferences: ${styleTypes}, ${occasionStyle}`);
+        console.log(`[Inngest] Enhanced prompt: ${prompt}`);
+        
+        // Generate image using FLUX.1 Kontext-max with correct parameters
+        const output = await replicate.run(
+          "black-forest-labs/flux-kontext-max",
+          {
+            input: {
+              prompt: prompt,
+              input_image: userPhotoUrl,        // Correct parameter name
+              aspect_ratio: "match_input_image", // Preserve original dimensions
+              output_format: "jpg",
+              safety_tolerance: 2,              // Maximum allowed for input images
+              seed: 42                          // For reproducible results
+            }
+          }
+        );
+        
+        if (output) {
+          const imageUrl = typeof output === 'string' ? output : (output as string[])[0];
+          generated_visualizations.push({
+            outfit_name: outfit.name as string || `Outfit ${i + 1}`,
+            visualization: {
+              image_url: imageUrl,
+              width: 768,
+              height: 1024
+            },
+            outfit_data: outfit
+          });
+          console.log(`[Inngest] Successfully generated visualization ${i + 1} for session ${sessionId}`);
+        } else {
+          console.warn(`[Inngest] No output from Replicate for outfit ${i + 1} in session ${sessionId}`);
+          generated_visualizations.push({
+            outfit_name: outfit.name as string || `Outfit ${i + 1}`,
+            error: "Failed to generate visualization",
+            outfit_data: outfit
+          });
+        }
+      } catch (error) {
+        console.error(`[Inngest] Failed to generate visualization for outfit ${i + 1} in session ${sessionId}:`, error);
+        generated_visualizations.push({
+          outfit_name: outfit.name as string || `Outfit ${i + 1}`,
+          error: `Visualization generation failed: ${error instanceof Error ? error.message : String(error)}`,
+          outfit_data: outfit
+        });
+      }
     }
-
-    return data;
+    
+    return {
+      visualizations: generated_visualizations,
+      total_generated: generated_visualizations.filter(v => 'visualization' in v).length
+    };
   } catch (error) {
-    console.error(`[Inngest] Flux visualization error for session ${sessionId}:`, error);
+    console.error(`[Inngest] Error in outfit visualization generation for session ${sessionId}:`, error);
     // Don't throw error - continue without visualizations
     return { visualizations: [] };
   }

@@ -27,6 +27,7 @@ export default function CreateOutfitPage() {
   const [selectedPhoto, setSelectedPhoto] = useState<string>('');
   const [selectedOccasion, setSelectedOccasion] = useState<string>('');
   const [constraints, setConstraints] = useState<string>('');
+  const [textDescription, setTextDescription] = useState<string>('');
 
   const userPreferences = user?.unsafeMetadata?.stylePreferences as Record<string, unknown> | undefined;
 
@@ -52,9 +53,15 @@ export default function CreateOutfitPage() {
           photoFile: selectedPhoto,
           occasion: selectedOccasion,
           constraints: constraints || undefined,
+          textDescription: textDescription || undefined,
           userPreferences: userPreferences || {},
         }),
       });
+
+      if (!response.ok) {
+        const errorResult = await response.json();
+        throw new Error(errorResult.error || `HTTP ${response.status}: ${response.statusText}`);
+      }
 
       const result = await response.json();
 
@@ -136,6 +143,18 @@ export default function CreateOutfitPage() {
                   </div>
                   
                   <div className="space-y-4">
+                    <div>
+                      <label htmlFor="textDescription" className="block text-sm font-medium text-slate-300 mb-2">
+                        Additional style details (Optional)
+                      </label>
+                      <Input
+                        id="textDescription"
+                        placeholder="e.g., 'I want to look professional but approachable', 'something trendy and youthful'"
+                        value={textDescription}
+                        onChange={(e) => setTextDescription(e.target.value)}
+                        className="bg-slate-700 border-slate-600 text-white placeholder-slate-400"
+                      />
+                    </div>
                     <div>
                       <label htmlFor="constraints" className="block text-sm font-medium text-slate-300 mb-2">
                         Any specific requirements or constraints? (Optional)

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
+import { head } from '@vercel/blob';
 
 export async function GET(
   request: NextRequest,
@@ -13,65 +14,55 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    
     // Verify the session belongs to the user
     if (!sessionId.startsWith(userId)) {
       return NextResponse.json({ error: 'Session not found' }, { status: 404 });
     }
 
-    // In a real implementation, you would fetch results from blob storage
-    // The blob key would be: `fashion-results/${userId}/${sessionId}.json`
-    
-    // For now, we'll return a mock response to demonstrate the structure
-    const mockResults = {
-      sessionId,
-      userId,
-      timestamp: new Date().toISOString(),
-      originalPhoto: `https://example.com/fashion-uploads/${sessionId}.jpg`,
-      analysis: {
-        body_analysis: {
-          body_type: "hourglass",
-          key_features: ["balanced proportions", "defined waist"],
-          proportions: "Well-balanced shoulders and hips with a defined waistline"
-        },
-        color_analysis: {
-          skin_undertone: "warm",
-          best_colors: ["coral", "warm red", "golden yellow", "olive green"],
-          colors_to_avoid: ["bright white", "cool blues"]
-        },
-        style_assessment: {
-          current_style: "casual comfortable",
-          strengths: ["good fit through waist", "flattering neckline"],
-          improvement_areas: ["could add more structure", "accessories needed"]
-        },
-        recommendations_summary: "Focus on fitted silhouettes that emphasize your waist, warm colors that complement your undertones"
-      },
-      recommendations: {
-        outfit_recommendations: [
-          {
-            name: "Professional Chic",
-            description: "A sophisticated work look that flatters your hourglass figure",
-            items: {
-              top: { item: "Silk blouse", color: "coral", why: "Warm color complements skin tone" },
-              bottom: { item: "High-waisted trousers", color: "navy", why: "Emphasizes natural waistline" },
-              shoes: { item: "Pointed toe pumps", color: "nude", why: "Elongates legs professionally" },
-              accessories: [{ item: "Statement earrings", why: "Draws attention to face" }]
-            },
-            styling_tips: ["Tuck blouse to emphasize waist", "Add a structured blazer for meetings"],
-            budget_estimate: "$150-250",
-            occasion_fit: "Perfect for office presentations and important meetings"
-          }
-        ],
-        general_styling_advice: ["Always define your waist", "Choose warm undertones", "Invest in quality basics"],
-        shopping_tips: ["Look for size charts that account for bust-waist ratio", "Try before buying online"],
-        image_generation_prompt: "Professional woman in coral silk blouse and navy high-waisted trousers, hourglass figure, confident pose in modern office setting"
-      }
-    };
+    // Get the blob storage token
+    const BLOB_READ_WRITE_TOKEN = process.env.BLOB_READ_WRITE_TOKEN;
+    if (!BLOB_READ_WRITE_TOKEN) {
+      console.error('BLOB_READ_WRITE_TOKEN environment variable is not set');
+      return NextResponse.json({ error: 'Server configuration error' }, { status: 500 });
+    }
 
-    return NextResponse.json({
-      success: true,
-      data: mockResults,
-    });
+    // Check if results exist in blob storage
+    const blobKey = `fashion-results/${userId}/${sessionId}.json`;
+    
+    try {
+      // Check if the blob exists
+      const blobInfo = await head(blobKey, { token: BLOB_READ_WRITE_TOKEN });
+      
+      if (!blobInfo) {
+        return NextResponse.json({ 
+          success: false, 
+          message: 'Processing in progress. Please wait...' 
+        });
+      }
+      
+      // Fetch the actual results using the blob URL
+      const response = await fetch(blobInfo.url);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch blob: ${response.status}`);
+      }
+      
+      const resultsText = await response.text();
+      const results = JSON.parse(resultsText);
+
+      return NextResponse.json({
+        success: true,
+        data: results,
+      });
+
+    } catch (blobError) {
+      // Blob doesn't exist yet - workflow might still be processing
+      console.log(`Results not ready for session ${sessionId}:`, blobError);
+      
+      return NextResponse.json({
+        success: false,
+        message: 'Your fashion analysis is still processing. Please wait a moment and refresh...',
+      });
+    }
 
   } catch (error) {
     console.error('Results fetch error:', error);

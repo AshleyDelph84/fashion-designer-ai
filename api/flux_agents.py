@@ -38,15 +38,13 @@ async def generate_outfit_visualization(request: OutfitVisualizationRequest):
     Takes user photo and outfit description, returns image of user wearing the outfit
     """
     try:
-        # Construct the prompt for FLUX.1 Kontext
-        prompt = f"""Transform the person in this image to be wearing: {request.outfit_description}. 
-        Style: {request.style_prompt}. 
-        Setting: {request.background_setting}. 
-        Keep the person's face, body type, and proportions exactly the same. 
-        Only change the clothing to match the outfit description. 
-        High quality, professional fashion photography, realistic lighting."""
+        # Construct the prompt specifically for outfit editing (NOT person generation)
+        prompt = f"""Edit only the clothing in this image. Replace the current outfit with: {request.outfit_description}. 
+        PRESERVE COMPLETELY: person's face, skin tone, body shape, pose, background, lighting.
+        CHANGE ONLY: the clothing items to match the new outfit description.
+        Style: {request.style_prompt}. Keep original photo quality and lighting."""
         
-        # Generate image using FLUX.1 Kontext via Replicate
+        # Generate image using FLUX.1 Kontext via Replicate with outfit editing parameters
         output = replicate.run(
             "black-forest-labs/flux-kontext-max",
             input={
@@ -56,7 +54,9 @@ async def generate_outfit_visualization(request: OutfitVisualizationRequest):
                 "output_format": "jpg",
                 "output_quality": 95,
                 "safety_tolerance": 2,
-                "prompt_upsampling": True
+                "prompt_upsampling": False,  # Disable to preserve original image details
+                "guidance_scale": 3.5,  # Lower guidance for more preservation
+                "num_inference_steps": 30  # Moderate steps for quality vs preservation balance
             }
         )
         
