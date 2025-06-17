@@ -13,7 +13,7 @@ export async function POST(request: NextRequest) {
 
     // Parse the request body
     const body = await request.json();
-    const { photoFile, occasion, constraints, userPreferences, textDescription } = body;
+    const { photoFile, occasion, quality = 'high', constraints, userPreferences, textDescription } = body;
 
     if (!photoFile || !occasion || !userPreferences) {
       return NextResponse.json({ 
@@ -50,6 +50,7 @@ export async function POST(request: NextRequest) {
         photoUrl: photoBlob.url,
         userPreferences,
         occasion,
+        quality,
         constraints: constraints || undefined,
         textDescription: textDescription || undefined,
       },

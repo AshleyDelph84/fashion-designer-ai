@@ -44,19 +44,19 @@ async def generate_outfit_visualization(request: OutfitVisualizationRequest):
         CHANGE ONLY: the clothing items to match the new outfit description.
         Style: {request.style_prompt}. Keep original photo quality and lighting."""
         
-        # Generate image using FLUX.1 Kontext via Replicate with outfit editing parameters
+        # Generate image using FLUX.1 Kontext via Replicate with enhanced quality parameters
         output = replicate.run(
             "black-forest-labs/flux-kontext-max",
             input={
                 "prompt": prompt,
-                "image": request.user_photo_url,
+                "input_image": request.user_photo_url,
                 "aspect_ratio": "3:4",
                 "output_format": "jpg",
                 "output_quality": 95,
                 "safety_tolerance": 2,
-                "prompt_upsampling": False,  # Disable to preserve original image details
-                "guidance_scale": 3.5,  # Lower guidance for more preservation
-                "num_inference_steps": 30  # Moderate steps for quality vs preservation balance
+                "prompt_upsampling": True,  # Enable for better detail generation
+                "guidance_scale": 3.5,  # Optimized for detail preservation
+                "num_inference_steps": 50  # Increased steps for higher quality
             }
         )
         
@@ -70,8 +70,8 @@ async def generate_outfit_visualization(request: OutfitVisualizationRequest):
             "success": True,
             "visualization": GeneratedImageResponse(
                 image_url=image_url,
-                width=768,  # Standard output size for 3:4 aspect ratio
-                height=1024
+                width=1024,  # Enhanced output size for 3:4 aspect ratio
+                height=1536
             )
         }
         

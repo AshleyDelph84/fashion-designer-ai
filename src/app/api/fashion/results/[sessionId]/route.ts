@@ -47,7 +47,25 @@ export async function GET(
       }
       
       const resultsText = await response.text();
-      const results = JSON.parse(resultsText);
+      
+      // Validate and parse JSON with proper error handling
+      if (!resultsText || resultsText.trim().length === 0) {
+        throw new Error('Empty response from blob storage');
+      }
+      
+      let results;
+      try {
+        results = JSON.parse(resultsText);
+      } catch (parseError) {
+        console.error(`[Results API] JSON parse error for session ${sessionId}:`, parseError);
+        console.error(`[Results API] Raw response text (first 200 chars):`, resultsText.substring(0, 200));
+        throw new Error(`Invalid JSON data in results: ${parseError instanceof Error ? parseError.message : String(parseError)}`);
+      }
+      
+      // Validate the parsed results structure
+      if (!results || typeof results !== 'object') {
+        throw new Error('Results data is not a valid object');
+      }
 
       return NextResponse.json({
         success: true,

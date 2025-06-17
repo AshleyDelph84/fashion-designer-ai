@@ -4,7 +4,7 @@ import { useUser, UserButton } from '@clerk/nextjs';
 import { useRouter } from 'next/navigation';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Camera, Sparkles, History, Settings, Upload } from "lucide-react";
+import { Camera, Sparkles, History, Settings, Upload, Heart } from "lucide-react";
 
 export default function Dashboard() {
   const { user, isLoaded } = useUser();
@@ -40,6 +40,14 @@ export default function Dashboard() {
               <h1 className="text-2xl font-bold">AI Fashion Guru</h1>
             </div>
             <div className="flex items-center space-x-4">
+              <Button
+                variant="outline"
+                className="border-slate-600 text-slate-300 hover:bg-slate-700"
+                onClick={() => router.push('/dashboard/favorites')}
+              >
+                <Heart className="mr-2 h-4 w-4" />
+                Favorites
+              </Button>
               <UserButton 
                 appearance={{
                   elements: {
@@ -84,7 +92,7 @@ export default function Dashboard() {
             </CardContent>
           </Card>
 
-          <Card className="bg-slate-800/50 border-slate-700 hover:bg-slate-800/70 transition-colors cursor-pointer">
+          <Card className="bg-slate-800/50 border-slate-700 hover:bg-slate-800/70 transition-colors cursor-pointer" onClick={() => router.push('/dashboard/history')}>
             <CardHeader className="text-center">
               <div className="mx-auto mb-4 w-16 h-16 bg-purple-500/20 rounded-full flex items-center justify-center">
                 <History className="h-8 w-8 text-purple-400" />
@@ -95,7 +103,7 @@ export default function Dashboard() {
               </CardDescription>
             </CardHeader>
             <CardContent className="pt-0">
-              <Button variant="outline" className="w-full border-slate-600 text-slate-300 hover:bg-slate-700">
+              <Button variant="outline" className="w-full border-slate-600 text-slate-300 hover:bg-slate-700" onClick={() => router.push('/dashboard/history')}>
                 View History
               </Button>
             </CardContent>

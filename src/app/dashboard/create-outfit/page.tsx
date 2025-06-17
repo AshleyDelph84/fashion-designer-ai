@@ -19,6 +19,12 @@ const occasions = [
   { id: "travel", title: "Travel" },
 ];
 
+const qualityOptions = [
+  { id: "standard", title: "Standard Quality", subtitle: "2x upscaled (~45 seconds)", recommended: false },
+  { id: "high", title: "High Quality", subtitle: "2x upscaled with face enhancement (~90 seconds)", recommended: true },
+  { id: "ultra", title: "Ultra Quality", subtitle: "4x upscaled with face enhancement (~120 seconds)", recommended: false },
+];
+
 export default function CreateOutfitPage() {
   const { user } = useUser();
   const router = useRouter();
@@ -26,6 +32,7 @@ export default function CreateOutfitPage() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [selectedPhoto, setSelectedPhoto] = useState<string>('');
   const [selectedOccasion, setSelectedOccasion] = useState<string>('');
+  const [selectedQuality, setSelectedQuality] = useState<string>('high');
   const [constraints, setConstraints] = useState<string>('');
   const [textDescription, setTextDescription] = useState<string>('');
 
@@ -52,6 +59,7 @@ export default function CreateOutfitPage() {
         body: JSON.stringify({
           photoFile: selectedPhoto,
           occasion: selectedOccasion,
+          quality: selectedQuality,
           constraints: constraints || undefined,
           textDescription: textDescription || undefined,
           userPreferences: userPreferences || {},
@@ -141,6 +149,33 @@ export default function CreateOutfitPage() {
                       />
                     ))}
                   </div>
+
+                  {/* Quality Selection */}
+                  <div className="mb-6">
+                    <h3 className="text-lg font-medium text-white mb-2">Image Quality</h3>
+                    <p className="text-sm text-slate-400 mb-4">Choose your preferred quality level for generated outfit images</p>
+                    <div className="grid md:grid-cols-3 gap-4">
+                      {qualityOptions.map((quality) => (
+                        <div
+                          key={quality.id}
+                          className={`relative p-4 rounded-lg border-2 cursor-pointer transition-all duration-200 ${
+                            selectedQuality === quality.id 
+                              ? 'border-pink-500 bg-pink-500/10' 
+                              : 'border-slate-600 hover:border-slate-500 bg-slate-800/30'
+                          }`}
+                          onClick={() => setSelectedQuality(quality.id)}
+                        >
+                          {quality.recommended && (
+                            <div className="absolute -top-2 -right-2 bg-pink-500 text-white text-xs px-2 py-1 rounded-full">
+                              Recommended
+                            </div>
+                          )}
+                          <div className="text-white font-medium">{quality.title}</div>
+                          <div className="text-slate-400 text-sm mt-1">{quality.subtitle}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                   
                   <div className="space-y-4">
                     <div>
@@ -192,7 +227,7 @@ export default function CreateOutfitPage() {
                   )}
                 </Button>
                 <p className="text-sm text-slate-400 mt-3">
-                  This will take 30-60 seconds to analyze your photo and generate personalized recommendations
+                  This will take 45-120 seconds to analyze your photo and generate high-quality upscaled recommendations
                 </p>
               </div>
             )}

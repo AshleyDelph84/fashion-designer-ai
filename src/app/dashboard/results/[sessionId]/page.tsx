@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, use } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { OutfitDetailModal } from "@/components/ui/outfit-detail-modal";
 import { ArrowLeft, Sparkles, Loader2, Heart, Share, Download } from "lucide-react";
 
 interface ResultsPageProps {
@@ -11,18 +12,20 @@ interface ResultsPageProps {
 }
 
 export default function ResultsPage({ params }: ResultsPageProps) {
-  const [sessionId, setSessionId] = useState<string>('');
-  
-  useEffect(() => {
-    params.then(resolved => setSessionId(resolved.sessionId));
-  }, [params]);
+  const { sessionId } = use(params);
   const router = useRouter();
   const [results, setResults] = useState<Record<string, unknown> | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string>('');
+  const [favorites, setFavorites] = useState<Record<number, boolean>>({});
+  const [savingFavorites, setSavingFavorites] = useState<Record<number, boolean>>({});
+  const [selectedOutfit, setSelectedOutfit] = useState<{
+    outfit: Record<string, unknown>;
+    visualization?: { image_url: string; replicate_url?: string; width?: number; height?: number; blob_key?: string };
+    index: number;
+  } | null>(null);
 
   useEffect(() => {
-    if (!sessionId) return;
     
     const checkResults = async () => {
       try {
@@ -32,6 +35,8 @@ export default function ResultsPage({ params }: ResultsPageProps) {
         if (data.success) {
           setResults(data.data);
           setIsLoading(false);
+          // Check favorite status for each outfit
+          checkFavoriteStatus(data.data);
         } else {
           // Still processing, check again in a few seconds
           setTimeout(checkResults, 3000);
@@ -44,7 +49,68 @@ export default function ResultsPage({ params }: ResultsPageProps) {
     };
 
     checkResults();
-  }, [sessionId]);
+  }, []);
+
+  const checkFavoriteStatus = async (resultsData: Record<string, unknown>) => {
+    const recommendations = resultsData?.recommendations as Record<string, unknown>;
+    const outfitRecommendations = recommendations?.outfit_recommendations as Array<Record<string, unknown>>;
+    
+    if (!outfitRecommendations) return;
+
+    const favoriteChecks = outfitRecommendations.map(async (_, index) => {
+      try {
+        const response = await fetch('/api/fashion/favorites/check', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sessionId, outfitIndex: index })
+        });
+        const data = await response.json();
+        return { index, isFavorited: data.isFavorited };
+      } catch (error) {
+        console.error(`Error checking favorite status for outfit ${index}:`, error);
+        return { index, isFavorited: false };
+      }
+    });
+
+    const results = await Promise.all(favoriteChecks);
+    const newFavorites: Record<number, boolean> = {};
+    results.forEach(({ index, isFavorited }) => {
+      newFavorites[index] = isFavorited;
+    });
+    setFavorites(newFavorites);
+  };
+
+  const toggleFavorite = async (outfitIndex: number) => {
+    setSavingFavorites(prev => ({ ...prev, [outfitIndex]: true }));
+    
+    try {
+      const action = favorites[outfitIndex] ? 'remove' : 'add';
+      const response = await fetch('/api/fashion/favorites', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId, outfitIndex, action })
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        setFavorites(prev => ({ ...prev, [outfitIndex]: data.isFavorited }));
+      } else {
+        console.error('Failed to update favorite:', data.error);
+      }
+    } catch (error) {
+      console.error('Error toggling favorite:', error);
+    } finally {
+      setSavingFavorites(prev => ({ ...prev, [outfitIndex]: false }));
+    }
+  };
+
+  const handleViewDetails = (outfit: Record<string, unknown>, visualization: { image_url: string; replicate_url?: string; width?: number; height?: number; blob_key?: string } | undefined, index: number) => {
+    setSelectedOutfit({ outfit, visualization, index });
+  };
+
+  const handleCloseModal = () => {
+    setSelectedOutfit(null);
+  };
 
   if (isLoading) {
     return (
@@ -191,7 +257,8 @@ export default function ResultsPage({ params }: ResultsPageProps) {
                           <img
                             src={visualization.visualization.image_url}
                             alt={`${outfit.name} visualization`}
-                            className="w-full h-full object-cover"
+                            className="w-full h-full object-cover hover:object-contain transition-all duration-300 cursor-pointer"
+                            onClick={() => handleViewDetails(outfit, visualization?.visualization, index)}
                           />
                         </div>
                       )}
@@ -225,9 +292,32 @@ export default function ResultsPage({ params }: ResultsPageProps) {
                       {/* Budget and Actions */}
                       <div className="flex justify-between items-center pt-4 border-t border-slate-600">
                         <span className="text-sm text-slate-400">{outfit.budget_estimate as string}</span>
-                        <Button size="sm" className="bg-pink-500 hover:bg-pink-600">
-                          View Details
-                        </Button>
+                        <div className="flex gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className={`border-slate-600 ${
+                              favorites[index] 
+                                ? 'text-pink-400 border-pink-500 bg-pink-500/10' 
+                                : 'text-slate-300 hover:bg-slate-700'
+                            }`}
+                            onClick={() => toggleFavorite(index)}
+                            disabled={savingFavorites[index]}
+                          >
+                            {savingFavorites[index] ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <Heart className={`h-4 w-4 ${favorites[index] ? 'fill-current' : ''}`} />
+                            )}
+                          </Button>
+                          <Button 
+                            size="sm" 
+                            className="bg-pink-500 hover:bg-pink-600"
+                            onClick={() => handleViewDetails(outfit, visualization?.visualization, index)}
+                          >
+                            View Details
+                          </Button>
+                        </div>
                       </div>
                       
                       {/* Visualization Error */}
@@ -271,6 +361,33 @@ export default function ResultsPage({ params }: ResultsPageProps) {
           </Button>
         </div>
       </main>
+
+      {/* Outfit Detail Modal */}
+      {selectedOutfit && (
+        <OutfitDetailModal
+          isOpen={true}
+          onClose={handleCloseModal}
+          outfit={selectedOutfit.outfit as {
+            name: string;
+            description: string;
+            items: {
+              top: { item: string; color: string; brand?: string; price?: string };
+              bottom: { item: string; color: string; brand?: string; price?: string };
+              shoes: { item: string; color: string; brand?: string; price?: string };
+              accessories?: { item: string; color: string; brand?: string; price?: string }[];
+            };
+            styling_tips: string[];
+            budget_estimate: string;
+          }}
+          visualization={selectedOutfit.visualization}
+          originalPhoto={results?.originalPhoto as string}
+          sessionId={sessionId}
+          outfitIndex={selectedOutfit.index}
+          occasion={(results as { occasion?: string })?.occasion || 'casual'}
+          isFavorited={favorites[selectedOutfit.index]}
+          onToggleFavorite={() => toggleFavorite(selectedOutfit.index)}
+        />
+      )}
     </div>
   );
 }

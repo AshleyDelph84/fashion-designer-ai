@@ -16,6 +16,76 @@ const replicate = new Replicate({
   auth: REPLICATE_API_TOKEN,
 });
 
+// Quality settings for different generation modes
+function getQualitySettings(quality: string) {
+  switch (quality) {
+    case 'standard':
+      return {
+        num_inference_steps: 30,
+        guidance_scale: 3.0,
+        output_quality: 85,
+        prompt_upsampling: false,
+        upscale_factor: 2,
+        face_enhance: false
+      };
+    case 'high':
+      return {
+        num_inference_steps: 50,
+        guidance_scale: 3.5,
+        output_quality: 95,
+        prompt_upsampling: true,
+        upscale_factor: 2,
+        face_enhance: true
+      };
+    case 'ultra':
+      return {
+        num_inference_steps: 75,
+        guidance_scale: 4.0,
+        output_quality: 100,
+        prompt_upsampling: true,
+        upscale_factor: 4,
+        face_enhance: true
+      };
+    default:
+      return {
+        num_inference_steps: 50,
+        guidance_scale: 3.5,
+        output_quality: 95,
+        prompt_upsampling: true,
+        upscale_factor: 2,
+        face_enhance: true
+      };
+  }
+}
+
+// Real-ESRGAN upscaling function
+async function upscaleImage(imageUrl: string, scaleFactor: number, faceEnhance: boolean, sessionId: string, outfitIndex: number) {
+  try {
+    console.log(`[Inngest] Starting Real-ESRGAN upscaling for session ${sessionId}, outfit ${outfitIndex + 1} - Scale: ${scaleFactor}x, Face enhance: ${faceEnhance}`);
+    
+    const output = await replicate.run(
+      "nightmareai/real-esrgan",
+      {
+        input: {
+          image: imageUrl,
+          scale: scaleFactor,
+          face_enhance: faceEnhance
+        }
+      }
+    );
+
+    if (!output || typeof output !== 'string') {
+      throw new Error('Real-ESRGAN did not return a valid image URL');
+    }
+
+    console.log(`[Inngest] Successfully upscaled image for session ${sessionId}, outfit ${outfitIndex + 1}`);
+    return output;
+  } catch (error) {
+    console.error(`[Inngest] Real-ESRGAN upscaling failed for session ${sessionId}, outfit ${outfitIndex + 1}:`, error);
+    throw error;
+  }
+}
+
 // Define data structure for fashion analysis workflow
 interface FashionAnalysisRequestedData {
   userId: string;
@@ -29,6 +99,7 @@ interface FashionAnalysisRequestedData {
     budget: string;
   };
   occasion: string;
+  quality?: string;
   constraints?: string;
   textDescription?: string;
 }
@@ -38,7 +109,7 @@ export const generateFashionRecommendations = inngest.createFunction(
   { id: "generate-fashion-recommendations" },
   { event: "fashion/analysis.requested" },
   async ({ event, step }: { event: { data: FashionAnalysisRequestedData }; step: unknown }) => {
-    const { userId, sessionId, photoUrl, userPreferences, occasion, constraints, textDescription } = event.data;
+    const { userId, sessionId, photoUrl, userPreferences, occasion, quality = 'high', constraints, textDescription } = event.data;
     console.log(`[Inngest] Starting fashion analysis workflow for session ${sessionId}`);
     console.log(`[Inngest] Photo URL: ${photoUrl}`);
     console.log(`[Inngest] User ID: ${userId}`);
@@ -76,7 +147,7 @@ export const generateFashionRecommendations = inngest.createFunction(
 
     // Step 3: Generate Visualization Images with Flux-kontext
     const visualizationsUnknown = await step.run("generate-visualizations", () => 
-      generateOutfitVisualizations(photoUrl, JSON.parse(extractJsonFromMarkdown(recommendations)), sessionId, userPreferences, occasion)
+      generateOutfitVisualizations(photoUrl, JSON.parse(extractJsonFromMarkdown(recommendations)), sessionId, userPreferences, occasion, quality)
     );
     const visualizations = visualizationsUnknown as { visualizations: Array<{ outfit_name: string; visualization?: { image_url: string }; error?: string }> };
 
@@ -255,7 +326,8 @@ async function generateOutfitVisualizations(
   recommendations: Record<string, unknown>,
   sessionId: string,
   userPreferences?: Record<string, unknown>,
-  occasion?: string
+  occasion?: string,
+  quality?: string
 ) {
   try {
     // Extract outfit recommendations from the recommendations object
@@ -298,33 +370,108 @@ async function generateOutfitVisualizations(
         console.log(`[Inngest] Style preferences: ${styleTypes}, ${occasionStyle}`);
         console.log(`[Inngest] Enhanced prompt: ${prompt}`);
         
-        // Generate image using FLUX.1 Kontext-max with correct parameters
+        // Get quality settings based on user selection
+        const qualitySettings = getQualitySettings(quality || 'high');
+        
+        // Generate image using FLUX.1 Kontext-max with quality-specific parameters
         const output = await replicate.run(
           "black-forest-labs/flux-kontext-max",
           {
             input: {
               prompt: prompt,
-              input_image: userPhotoUrl,        // Correct parameter name
-              aspect_ratio: "match_input_image", // Preserve original dimensions
+              input_image: userPhotoUrl,
+              aspect_ratio: "3:4",
               output_format: "jpg",
-              safety_tolerance: 2,              // Maximum allowed for input images
-              seed: 42                          // For reproducible results
+              output_quality: qualitySettings.output_quality,
+              safety_tolerance: 2,
+              num_inference_steps: qualitySettings.num_inference_steps,
+              guidance_scale: qualitySettings.guidance_scale,
+              prompt_upsampling: qualitySettings.prompt_upsampling,
+              seed: 42
             }
           }
         );
         
         if (output) {
-          const imageUrl = typeof output === 'string' ? output : (output as string[])[0];
-          generated_visualizations.push({
-            outfit_name: outfit.name as string || `Outfit ${i + 1}`,
-            visualization: {
-              image_url: imageUrl,
-              width: 768,
-              height: 1024
-            },
-            outfit_data: outfit
-          });
-          console.log(`[Inngest] Successfully generated visualization ${i + 1} for session ${sessionId}`);
+          const replicateImageUrl = typeof output === 'string' ? output : (output as string[])[0];
+          
+          // Step 1: Upscale the generated image using Real-ESRGAN
+          let finalImageUrl: string;
+          let finalWidth: number;
+          let finalHeight: number;
+          let upscaledUrl: string | undefined;
+          
+          try {
+            console.log(`[Inngest] Starting upscaling process for session ${sessionId}, outfit ${i + 1}`);
+            upscaledUrl = await upscaleImage(
+              replicateImageUrl, 
+              qualitySettings.upscale_factor, 
+              qualitySettings.face_enhance, 
+              sessionId, 
+              i
+            );
+            
+            finalImageUrl = upscaledUrl;
+            finalWidth = 1024 * qualitySettings.upscale_factor;
+            finalHeight = 1536 * qualitySettings.upscale_factor;
+            
+            console.log(`[Inngest] Successfully upscaled image to ${finalWidth}x${finalHeight} for session ${sessionId}, outfit ${i + 1}`);
+          } catch (upscaleError) {
+            console.warn(`[Inngest] Upscaling failed for session ${sessionId}, outfit ${i + 1}, using original image:`, upscaleError);
+            finalImageUrl = replicateImageUrl;
+            finalWidth = 1024;
+            finalHeight = 1536;
+          }
+          
+          // Step 2: Download and save the final image to blob storage for permanent access
+          try {
+            console.log(`[Inngest] Downloading final image for session ${sessionId}, outfit ${i + 1}`);
+            const imageResponse = await fetch(finalImageUrl);
+            if (!imageResponse.ok) {
+              throw new Error(`Failed to download image: ${imageResponse.status}`);
+            }
+            
+            const imageBuffer = await imageResponse.arrayBuffer();
+            const imageKey = `fashion-visualizations/${sessionId}/outfit-${i + 1}.jpg`;
+            
+            const savedImage = await put(imageKey, imageBuffer, {
+              access: "public",
+              contentType: "image/jpeg",
+              token: FASHION_BLOB_TOKEN,
+              allowOverwrite: true,
+            });
+            
+            console.log(`[Inngest] Successfully saved final image to blob storage: ${savedImage.url}`);
+            
+            generated_visualizations.push({
+              outfit_name: outfit.name as string || `Outfit ${i + 1}`,
+              visualization: {
+                image_url: savedImage.url,  // Use permanent blob URL instead of Replicate URL
+                replicate_url: replicateImageUrl,  // Keep original FLUX URL for reference
+                upscaled_url: upscaledUrl,  // Keep upscaled URL for reference
+                width: finalWidth,
+                height: finalHeight,
+                blob_key: imageKey,
+                upscale_factor: qualitySettings.upscale_factor,
+                face_enhanced: qualitySettings.face_enhance
+              },
+              outfit_data: outfit
+            });
+            console.log(`[Inngest] Successfully generated and saved ${qualitySettings.upscale_factor}x upscaled visualization ${i + 1} for session ${sessionId}`);
+          } catch (downloadError) {
+            console.error(`[Inngest] Failed to download/save final image for session ${sessionId}, outfit ${i + 1}:`, downloadError);
+            // Fallback to original Replicate URL if download fails
+            generated_visualizations.push({
+              outfit_name: outfit.name as string || `Outfit ${i + 1}`,
+              visualization: {
+                image_url: replicateImageUrl,
+                width: 1024,
+                height: 1536,
+                download_error: downloadError instanceof Error ? downloadError.message : String(downloadError)
+              },
+              outfit_data: outfit
+            });
+          }
         } else {
           console.warn(`[Inngest] No output from Replicate for outfit ${i + 1} in session ${sessionId}`);
           generated_visualizations.push({

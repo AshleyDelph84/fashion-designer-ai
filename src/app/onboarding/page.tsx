@@ -275,16 +275,43 @@ export default function OnboardingPage() {
                     This helps us recommend items within your price range
                   </CardDescription>
                 </CardHeader>
-                <div className="grid md:grid-cols-2 gap-4">
+                <div className="space-y-4">
                   {budgetRanges.map((budget) => (
-                    <StyleCard
+                    <label
                       key={budget.id}
-                      title={budget.title}
-                      description={budget.description}
-                      icon={budget.icon}
-                      selected={preferences.budget === budget.id}
-                      onClick={() => setPreferences(prev => ({ ...prev, budget: budget.id }))}
-                    />
+                      className={`flex items-center p-4 rounded-lg border-2 cursor-pointer transition-all duration-200 ${
+                        preferences.budget === budget.id
+                          ? 'border-pink-500 bg-pink-500/10'
+                          : 'border-slate-600 hover:border-slate-500 bg-slate-800/30'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="budget"
+                        value={budget.id}
+                        checked={preferences.budget === budget.id}
+                        onChange={(e) => setPreferences(prev => ({ ...prev, budget: e.target.value }))}
+                        className="sr-only"
+                      />
+                      <div className="flex items-center flex-1">
+                        <div className="mr-4">
+                          {budget.icon}
+                        </div>
+                        <div className="flex-1">
+                          <h3 className="text-lg font-semibold text-white">{budget.title}</h3>
+                          <p className="text-slate-400 text-sm">{budget.description}</p>
+                        </div>
+                        <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
+                          preferences.budget === budget.id
+                            ? 'border-pink-500 bg-pink-500'
+                            : 'border-slate-500'
+                        }`}>
+                          {preferences.budget === budget.id && (
+                            <div className="w-2 h-2 rounded-full bg-white"></div>
+                          )}
+                        </div>
+                      </div>
+                    </label>
                   ))}
                 </div>
               </div>
