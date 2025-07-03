@@ -65,7 +65,7 @@ async def analyze_photo_with_gemini(request: GeminiFashionAnalysisRequest):
         image = load_image_from_url(request.photo_url)
         
         # Initialize Gemini model
-        model = genai.GenerativeModel('gemini-2.0-flash-exp')
+        model = genai.GenerativeModel('gemini-2.5-flash')
         
         # Create comprehensive fashion analysis prompt
         analysis_prompt = f"""
@@ -142,7 +142,7 @@ async def recommend_outfit_with_gemini(request: GeminiOutfitRecommendationReques
     """Generate outfit recommendations using Gemini based on analysis"""
     try:
         # Initialize Gemini model
-        model = genai.GenerativeModel('gemini-2.0-flash-exp')
+        model = genai.GenerativeModel('gemini-2.5-flash')
         
         # Create outfit recommendation prompt
         recommendation_prompt = f"""

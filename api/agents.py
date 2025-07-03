@@ -90,7 +90,7 @@ async def test_search():
 # Fashion Analysis Agent using Google ADK
 fashion_analysis_agent = LlmAgent(
     name="fashion_analysis_agent",
-    model="gemini-2.0-flash",
+    model="gemini-2.5-flash",
     description="Expert fashion stylist and image analyst specializing in body type assessment, color analysis, and style recommendations",
     instruction=(
         "You are an expert fashion stylist and image analyst with deep knowledge of body types, color theory, style principles, and current fashion trends.\n\n"
@@ -143,7 +143,7 @@ fashion_analysis_agent = LlmAgent(
 # Outfit Recommendation Agent using Google ADK
 outfit_recommendation_agent = LlmAgent(
     name="outfit_recommendation_agent",
-    model="gemini-2.0-flash",
+    model="gemini-2.5-flash",
     description="Professional fashion stylist creating specific outfit recommendations based on body analysis and user preferences",
     instruction=(
         "You are a professional fashion stylist who creates specific, actionable outfit recommendations based on body analysis, user preferences, and occasion requirements.\n\n"
@@ -202,7 +202,7 @@ outfit_recommendation_agent = LlmAgent(
 # Multi-agent coordinator
 fashion_coordinator = LlmAgent(
     name="fashion_coordinator",
-    model="gemini-2.0-flash", 
+    model="gemini-2.5-flash", 
     description="Coordinates fashion analysis and outfit recommendation workflow",
     instruction="You coordinate between fashion analysis and outfit recommendation agents to provide comprehensive styling advice.",
     sub_agents=[fashion_analysis_agent, outfit_recommendation_agent]
